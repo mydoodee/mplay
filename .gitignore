@@ -1,0 +1,22 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.env
+
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+*.apk
+*.aab
+
+# IntelliJ / IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
