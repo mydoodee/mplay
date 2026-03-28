@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import '../models/song.dart';
+import '../models/playlist.dart';
 import 'api_service.dart';
 import '../database/db_helper.dart';
 import '../main.dart'; // To access audioHandler
@@ -21,10 +22,14 @@ class SongProvider with ChangeNotifier {
   List<Song> _favorites = [];
   List<Song> get favorites => _favorites;
 
+  List<Playlist> _playlists = [];
+  List<Playlist> get playlists => _playlists;
+
   SongProvider() {
     // Initialize lazily or after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFavorites();
+      _loadPlaylists();
       _initAudioListener();
     });
   }
@@ -109,5 +114,37 @@ class SongProvider with ChangeNotifier {
 
   Future<bool> isFavorite(String videoId) async {
     return await _dbHelper.isFavorite(videoId);
+  }
+
+  // ─── Playlists ───
+
+  Future<void> _loadPlaylists() async {
+    final maps = await _dbHelper.getPlaylists();
+    _playlists = maps.map((m) => Playlist.fromMap(m)).toList();
+    for (var playlist in _playlists) {
+      playlist.songs = await _dbHelper.getSongsForPlaylist(playlist.id);
+    }
+    notifyListeners();
+  }
+
+  Future<void> createNewPlaylist(String name) async {
+    if (name.trim().isEmpty) return;
+    await _dbHelper.createPlaylist(name.trim());
+    await _loadPlaylists();
+  }
+
+  Future<void> deletePlaylist(int id) async {
+    await _dbHelper.deletePlaylist(id);
+    await _loadPlaylists();
+  }
+
+  Future<void> addSongToPlaylist(int playlistId, Song song) async {
+    await _dbHelper.addSongToPlaylist(playlistId, song);
+    await _loadPlaylists();
+  }
+
+  Future<void> removeSongFromPlaylist(int playlistId, String videoId) async {
+    await _dbHelper.removeSongFromPlaylist(playlistId, videoId);
+    await _loadPlaylists();
   }
 }

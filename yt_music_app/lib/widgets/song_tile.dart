@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/song.dart';
+import '../services/song_provider.dart';
 import '../widgets/app_logo.dart';
+import '../utils/playlist_utils.dart';
+
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -103,10 +107,11 @@ class SongTile extends StatelessWidget {
               Navigator.pop(ctx);
               onTap();
             }),
-            _menuItem(ctx, Icons.playlist_add_rounded, 'เพิ่มในรายการถัดไป', () {
+            _menuItem(ctx, Icons.playlist_add_rounded, 'เพิ่มลงในเพลย์ลิสต์', () {
               Navigator.pop(ctx);
-              // TODO: Add to queue
+              PlaylistUtils.showAddToPlaylistSheet(context, song);
             }),
+
             _menuItem(
               ctx,
               isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -142,6 +147,7 @@ class SongTile extends StatelessWidget {
       visualDensity: VisualDensity.compact,
     );
   }
+
 
   void _showSongInfo(BuildContext context) {
     showDialog(
@@ -200,58 +206,9 @@ class SongTile extends StatelessWidget {
           splashColor: const Color(0xFFF15A24).withValues(alpha: 0.08),
           highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.04),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.only(left: 12, right: 6, top: 10, bottom: 10),
             child: Row(
               children: [
-                // 🎵 Album Art
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: song.thumbnail.isNotEmpty && song.thumbnail != "NA"
-                        ? CachedNetworkImage(
-                            imageUrl: song.thumbnail,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: const Color(0xFF1A1A1A),
-                              child: const Center(
-                                child: AppLogo(size: 18, showText: false),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => Container(
-                              width: 48,
-                              height: 48,
-                              color: const Color(0xFF1A1A1A),
-                              child: const Center(
-                                child: AppLogo(size: 18, showText: false),
-                              ),
-                            ),
-                          )
-                        : Container(
-                            width: 48,
-                            height: 48,
-                            color: const Color(0xFF1A1A1A),
-                            child: const Center(
-                              child: AppLogo(size: 18, showText: false),
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                
                 // 🎵 Title & Artist
                 Expanded(
                   child: Column(
@@ -299,6 +256,7 @@ class SongTile extends StatelessWidget {
                   ),
                 ),
                 
+                const SizedBox(width: 4),
                 // 🎵 Favorite button
                 IconButton(
                   icon: Icon(
@@ -307,18 +265,16 @@ class SongTile extends StatelessWidget {
                     color: isFavorite ? const Color(0xFFFF4466) : const Color(0xFF555555),
                   ),
                   onPressed: onFavoritePressed,
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 30),
                 ),
                 
                 // 🎵 More menu — ใช้งานได้จริงแล้ว!
                 IconButton(
-                  icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF555555), size: 16),
+                  icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF555555), size: 18),
                   onPressed: () => _showSongMenu(context),
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(6),
-                  constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 30),
                 ),
               ],
             ),

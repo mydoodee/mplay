@@ -31,6 +31,7 @@ Future<void> main() async {
         androidNotificationChannelId: 'com.ytmusic.channel.audio',
         androidNotificationChannelName: 'YouTube Music Playback',
         androidStopForegroundOnPause: true,
+        androidNotificationIcon: 'mipmap/launcher_icon',
       ),
     );
     debugPrint('✅ AudioService initialized successfully');
