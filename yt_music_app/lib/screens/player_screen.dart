@@ -44,7 +44,7 @@ class PlayerScreen extends StatelessWidget {
           icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const AppLogo(size: 20, showText: true),
+        title: const AppLogo(size: 26, showText: true),
         centerTitle: true,
         actions: [
           IconButton(

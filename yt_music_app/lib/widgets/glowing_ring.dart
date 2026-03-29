@@ -35,26 +35,34 @@ class _GlowingRingState extends State<GlowingRing> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          painter: _GlowingRingPainter(_controller.value, widget.color),
-          child: Padding(
-            padding: const EdgeInsets.all(2.0), // ระยะห่างจากกล่องด้านในนิดนึง
-            child: widget.child,
+    // Optimize performance by avoiding rebuild of MaskFilter.blur every frame.
+    // We draw the static glowing ring once and simply rotate it using GPU hardware acceleration.
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Positioned.fill(
+          child: RotationTransition(
+            turns: _controller,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: _StaticGlowingRingPainter(widget.color),
+              ),
+            ),
           ),
-        );
-      },
+        ),
+        Padding(
+          padding: const EdgeInsets.all(2.0), // ระยะห่างจากกล่องด้านในนิดนึง
+          child: widget.child,
+        ),
+      ],
     );
   }
 }
 
-class _GlowingRingPainter extends CustomPainter {
-  final double progress;
+class _StaticGlowingRingPainter extends CustomPainter {
   final Color color;
 
-  _GlowingRingPainter(this.progress, this.color);
+  _StaticGlowingRingPainter(this.color);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -64,15 +72,13 @@ class _GlowingRingPainter extends CustomPainter {
     // รัศมีของวงกลม (วาดให้อยู่ขอบของ Widget)
     final radius = (math.min(size.width, size.height) / 2);
 
-    // เส้นวงกลมด้านหลัง (Track) สีเทาเข้มๆ
+    // เส้นวงกลมด้านหลัง (Track) สีเทาเข้มๆ (หมุนไปก็ไม่เห็นความต่าง)
     final trackPaint = Paint()
       ..color = const Color(0xFF1E1E1E)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     
     canvas.drawCircle(center, radius, trackPaint);
-
-    final startAngle = progress * 2 * math.pi;
 
     // การไล่สี (Gradient) แบบเส้นดาวตก หางจาง หัวสว่าง
     final sweepGradient = SweepGradient(
@@ -82,7 +88,6 @@ class _GlowingRingPainter extends CustomPainter {
         Colors.white,                 // หัวเส้นไฟสีสว่างสุด
       ],
       stops: const [0.4, 0.95, 1.0], // หัวเส้นเล็กๆ พุ่งนำ
-      transform: GradientRotation(startAngle),
     );
 
     // แปรงสำหรับแสงฟุ้ง (Glow Effect)
@@ -108,7 +113,7 @@ class _GlowingRingPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GlowingRingPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color;
+  bool shouldRepaint(covariant _StaticGlowingRingPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

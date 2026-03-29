@@ -25,11 +25,15 @@ class SongProvider with ChangeNotifier {
   List<Playlist> _playlists = [];
   List<Playlist> get playlists => _playlists;
 
+  List<Song> _history = [];
+  List<Song> get history => _history;
+
   SongProvider() {
     // Initialize lazily or after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFavorites();
       _loadPlaylists();
+      _loadHistory();
       _initAudioListener();
     });
   }
@@ -64,8 +68,6 @@ class SongProvider with ChangeNotifier {
   }
 
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
-    _isLoading = true;
-    notifyListeners();
     try {
       if (queue != null && queue.isNotEmpty) {
         await audioHandler?.setQueue(queue, initialIndex: index);
@@ -73,11 +75,9 @@ class SongProvider with ChangeNotifier {
         await audioHandler?.playSong(song);
       }
       await _dbHelper.addToHistory(song);
+      await _loadHistory(); // Refresh history
     } catch (e) {
       print('DB/Audio Error in playSong: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
@@ -86,6 +86,7 @@ class SongProvider with ChangeNotifier {
     for (var song in songs) {
        await _dbHelper.addToHistory(song);
     }
+    await _loadHistory();
   }
 
   Future<void> shuffleAll(List<Song> songs) async {
@@ -99,6 +100,11 @@ class SongProvider with ChangeNotifier {
 
   Future<void> _loadFavorites() async {
     _favorites = await _dbHelper.getFavorites();
+    notifyListeners();
+  }
+
+  Future<void> _loadHistory() async {
+    _history = await _dbHelper.getHistory();
     notifyListeners();
   }
 

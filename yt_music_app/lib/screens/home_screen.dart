@@ -174,7 +174,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
-          else if (_selectedIndex == 0 && results.isEmpty)
+          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isEmpty)
             SliverFillRemaining(
               child: Center(
                 child: Column(
@@ -205,6 +205,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
+          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history_rounded, color: Color(0xFFF15A24), size: 22),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'เล่นล่าสุด',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final song = songProvider.history[index];
+                  final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: SongTile(
+                      song: song,
+                      isFavorite: isFavorite,
+                      onFavoritePressed: () => songProvider.toggleFavorite(song),
+                      onTap: () => songProvider.playSong(song, queue: songProvider.history, index: index),
+                    ),
+                  );
+                },
+                childCount: songProvider.history.length,
+              ),
+            ),
+          ]
           else if (_selectedIndex == 0)
             SliverList(
               delegate: SliverChildBuilderDelegate(

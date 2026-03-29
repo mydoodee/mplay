@@ -391,6 +391,17 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> skipToPrevious() => _player.seekToPrevious();
 
   @override
+  Future<void> skipToQueueItem(int index) async {
+    if (index >= 0 && index < _playlist.length) {
+      await _player.seek(Duration.zero, index: index);
+      // Ensure playing continues when skipping
+      if (!_player.playing) {
+        _player.play();
+      }
+    }
+  }
+
+  @override
   Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
     switch (repeatMode) {
       case AudioServiceRepeatMode.none:
