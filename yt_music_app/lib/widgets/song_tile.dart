@@ -59,21 +59,12 @@ class SongTile extends StatelessWidget {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: song.thumbnail.isNotEmpty && song.thumbnail != "NA"
-                        ? CachedNetworkImage(
-                            imageUrl: song.thumbnail,
-                            width: 48,
-                            height: 48,
-                            fit: BoxFit.cover,
-                          )
-                        : Container(
-                            width: 48,
-                            height: 48,
-                            color: const Color(0xFF252525),
-                            child: const Center(
-                              child: AppLogo(size: 20, showText: false),
-                            ),
-                          ),
+                    child: CachedNetworkImage(
+                        imageUrl: song.thumbnailUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                      ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -206,9 +197,45 @@ class SongTile extends StatelessWidget {
           splashColor: const Color(0xFFF15A24).withValues(alpha: 0.08),
           highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.04),
           child: Padding(
-            padding: const EdgeInsets.only(left: 12, right: 6, top: 10, bottom: 10),
+            padding: const EdgeInsets.only(left: 10, right: 6, top: 8, bottom: 8),
             child: Row(
               children: [
+                // 🖼 Thumbnail
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: song.thumbnailUrl,
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(
+                      width: 50,
+                      height: 50,
+                      color: const Color(0xFF252525),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: Color(0xFFF15A24),
+                          ),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (_, __, ___) => Container(
+                      width: 50,
+                      height: 50,
+                      color: const Color(0xFF252525),
+                      child: const Center(
+                        child: AppLogo(size: 18, showText: false),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 10),
+
                 // 🎵 Title & Artist
                 Expanded(
                   child: Column(
@@ -243,7 +270,7 @@ class SongTile extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            "  •  ${_formatDuration(song.duration)}",
+                            '  •  ${_formatDuration(song.duration)}',
                             style: const TextStyle(
                               color: Color(0xFF777777),
                               fontSize: 10,
@@ -255,26 +282,24 @@ class SongTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                
-                const SizedBox(width: 4),
-                // 🎵 Favorite button
-                IconButton(
-                  icon: Icon(
-                    isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    size: 18,
-                    color: isFavorite ? const Color(0xFFFF4466) : const Color(0xFF555555),
+
+                // ❤️ Favorite indicator (compact — icon only, no button)
+                if (isFavorite)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.favorite_rounded,
+                      size: 14,
+                      color: Color(0xFFFF4466),
+                    ),
                   ),
-                  onPressed: onFavoritePressed,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 30),
-                ),
-                
-                // 🎵 More menu — ใช้งานได้จริงแล้ว!
+
+                // ⋮ More menu
                 IconButton(
                   icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF555555), size: 18),
                   onPressed: () => _showSongMenu(context),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 30),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 30),
                 ),
               ],
             ),

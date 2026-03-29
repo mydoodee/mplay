@@ -58,12 +58,10 @@ class PlayerScreen extends StatelessWidget {
         children: [
           // 🎵 Dynamic Blurred Background
           Positioned.fill(
-            child: currentSong.thumbnail.isNotEmpty && currentSong.thumbnail != "NA"
-                ? CachedNetworkImage(
-                    imageUrl: currentSong.thumbnail,
-                    fit: BoxFit.cover,
-                  )
-                : Container(color: Colors.black),
+            child: CachedNetworkImage(
+                imageUrl: currentSong.thumbnailUrl,
+                fit: BoxFit.cover,
+              ),
           ),
           Positioned.fill(
             child: BackdropFilter(
@@ -91,7 +89,7 @@ class PlayerScreen extends StatelessWidget {
               children: [
                 const Spacer(flex: 1),
                 
-                // 🎵 Album Art — shadow สวยขึ้น
+                // 🎵 Album Art
                 Hero(
                   tag: 'album_art_${currentSong.id}',
                   child: Center(
@@ -110,27 +108,27 @@ class PlayerScreen extends StatelessWidget {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: currentSong.thumbnail.isNotEmpty && currentSong.thumbnail != "NA"
-                            ? CachedNetworkImage(
-                                imageUrl: currentSong.thumbnail,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: const Color(0xFF1A1A1A),
-                                child: Center(
-                                  child: StreamBuilder<PlaybackState>(
-                                    stream: audioHandler?.playbackState,
-                                    builder: (context, snapshot) {
-                                      final playing = snapshot.data?.playing ?? false;
-                                      return MusicVisualizer(
-                                        isPlaying: playing,
-                                        barCount: 9,
-                                        maxHeight: 80,
-                                      );
-                                    },
-                                  ),
-                                ),
+                        child: CachedNetworkImage(
+                          imageUrl: currentSong.thumbnailUrl,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                            color: const Color(0xFF1A1A1A),
+                            child: const Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFF15A24),
+                                strokeWidth: 2,
                               ),
+                            ),
+                          ),
+                          errorWidget: (_, __, ___) => Container(
+                            color: const Color(0xFF1A1A1A),
+                            child: const Icon(
+                              Icons.music_note_rounded,
+                              color: Color(0xFF333333),
+                              size: 60,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),

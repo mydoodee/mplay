@@ -5,6 +5,14 @@ class Song {
   final String thumbnail;
   final int duration;
 
+  // Always returns a valid YouTube thumbnail URL
+  String get thumbnailUrl {
+    if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
+      return thumbnail;
+    }
+    return 'https://i.ytimg.com/vi/$id/mqdefault.jpg';
+  }
+
   Song({
     required this.id,
     required this.title,
