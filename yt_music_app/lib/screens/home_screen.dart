@@ -7,6 +7,7 @@ import 'playlist_screen.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/glowing_ring.dart';
 import '../services/song_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/playlist_utils.dart';
@@ -155,32 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 16),
                     _buildPlaylistsGrid(songProvider),
                   ],
-                  if (_selectedIndex == 0 && results.isNotEmpty) _buildPlaylistHeader(results, 'ผลการค้นหา'),
-                  
-                  if (_selectedIndex == 0 && results.isNotEmpty)
-                    _buildActionButtons(songProvider, results),
-                  
-                  if (_selectedIndex == 0 && results.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 3,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF15A24),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'เพลงทั้งหมด',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFCCCCCC)),
-                          ),
-                        ],
-                      ),
-                    ),
+
                 ],
               ),
             ),
@@ -204,14 +180,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0D0D0D),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF1A1A1A), width: 1),
+                    GlowingRing(
+                      color: const Color(0xFFF15A24),
+                      child: Container(
+                        padding: const EdgeInsets.all(28),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0D0D0D),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const AppLogo(size: 60, showText: false), // Show logo as an icon
                       ),
-                      child: const AppLogo(size: 60, showText: false), // Show logo as an icon
                     ),
                     const SizedBox(height: 20),
                     const Text(
@@ -235,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   final song = list[index];
                   final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: SongTile(
                       song: song,
                       isFavorite: isFavorite,

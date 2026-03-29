@@ -94,10 +94,9 @@ class PlayerScreen extends StatelessWidget {
                   tag: 'album_art_${currentSong.id}',
                   child: Center(
                     child: Container(
-                      width: MediaQuery.of(context).size.width * 0.75,
-                      height: MediaQuery.of(context).size.width * 0.75,
+                      width: MediaQuery.of(context).size.width * 0.88,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.6),
@@ -107,25 +106,28 @@ class PlayerScreen extends StatelessWidget {
                         ],
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: CachedNetworkImage(
-                          imageUrl: currentSong.thumbnailUrl,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
-                            color: const Color(0xFF1A1A1A),
-                            child: const Center(
-                              child: CircularProgressIndicator(
-                                color: Color(0xFFF15A24),
-                                strokeWidth: 2,
+                        borderRadius: BorderRadius.circular(16),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: CachedNetworkImage(
+                            imageUrl: currentSong.hqThumbnailUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: const Color(0xFF1A1A1A),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFF15A24),
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
-                          ),
-                          errorWidget: (_, __, ___) => Container(
-                            color: const Color(0xFF1A1A1A),
-                            child: const Icon(
-                              Icons.music_note_rounded,
-                              color: Color(0xFF333333),
-                              size: 60,
+                            errorWidget: (_, __, ___) => Container(
+                              color: const Color(0xFF1A1A1A),
+                              child: const Icon(
+                                Icons.music_note_rounded,
+                                color: Color(0xFF333333),
+                                size: 60,
+                              ),
                             ),
                           ),
                         ),

@@ -166,13 +166,31 @@ class PlaylistScreen extends StatelessWidget {
                     (context, index) {
                       final song = songs[index];
                       final isFavorite = provider.favorites.any((s) => s.id == song.id);
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                        child: SongTile(
-                          song: song,
-                          isFavorite: isFavorite,
-                          onFavoritePressed: () => provider.toggleFavorite(song),
-                          onTap: () => provider.playSong(song, queue: songs, index: index),
+                      final isCustomPlaylist = currentPlaylist.id != -1;
+
+                      return Dismissible(
+                        key: Key('playlist_${currentPlaylist.id}_song_${song.id}'),
+                        direction: isCustomPlaylist ? DismissDirection.endToStart : DismissDirection.none,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 20.0),
+                          color: const Color(0xFFFF4466),
+                          child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                        ),
+                        onDismissed: (direction) {
+                          provider.removeSongFromPlaylist(currentPlaylist.id, song.id);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                          child: SongTile(
+                            song: song,
+                            isFavorite: isFavorite,
+                            onFavoritePressed: () => provider.toggleFavorite(song),
+                            onTap: () => provider.playSong(song, queue: songs, index: index),
+                            onRemoveFromPlaylist: isCustomPlaylist 
+                              ? () => provider.removeSongFromPlaylist(currentPlaylist.id, song.id) 
+                              : null,
+                          ),
                         ),
                       );
                     },
