@@ -6,6 +6,7 @@ import '../config/api_config.dart';
 import 'api_service.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
+  // สร้าง Player พร้อมตั้งค่าให้โหลด Buffer เพลงเก็บไว้ล่วงหน้าเยอะๆ (5-10 นาที) เพื่อไม่ให้เพลงหยุดกลางคัน
   final _player = AudioPlayer(
     audioLoadConfiguration: AudioLoadConfiguration(
       androidLoadControl: AndroidLoadControl(
@@ -13,7 +14,7 @@ class MyAudioHandler extends BaseAudioHandler {
         maxBufferDuration: const Duration(minutes: 10),    
         bufferForPlaybackDuration: const Duration(seconds: 2), 
         bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3), 
-        targetBufferBytes: 1024 * 1024 * 50, // 50 MB
+        targetBufferBytes: 1024 * 1024 * 50, 
       ),
       darwinLoadControl: DarwinLoadControl(
         preferredForwardBufferDuration: const Duration(minutes: 5),
@@ -22,19 +23,19 @@ class MyAudioHandler extends BaseAudioHandler {
     ),
   );
 
-  final Map<String, String> _urlCache = {};
-  int _currentIndex = -1;
-  AudioServiceRepeatMode _repeatMode = AudioServiceRepeatMode.none;
+  // ใช้ ConcatenatingAudioSource เพื่อระบบ Gapless Playback
+  final _playlist = ConcatenatingAudioSource(children: []);
   Timer? _positionTimer;
-  bool _isTransitioning = false;
 
   MyAudioHandler() {
     _init();
   }
 
   Future<void> _init() async {
+    await _player.setAudioSource(_playlist);
     _player.playbackEventStream.listen(_broadcastState);
 
+    // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 4 frame/วิ)
     _positionTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (_player.playing) {
         playbackState.add(playbackState.value.copyWith(
@@ -44,179 +45,156 @@ class MyAudioHandler extends BaseAudioHandler {
       }
     });
 
-    _player.playerStateStream.listen((state) async {
-      if (state.processingState == ProcessingState.completed) {
-        if (!_isTransitioning) {
-          await _handleSongComplete();
-        }
-      } else if (state.processingState == ProcessingState.idle && !_isTransitioning) {
-        if (_player.playing == false && _currentIndex >= 0) {
-           print('⚠️ Network idle or failure. Retrying stream...');
-           _retryCurrentSong();
-        }
+    // ตรวจจับการเลื่อนเพลง -> แจ้งเตือน UI ว่าเล่นเพลงไหนอยู่
+    _player.currentIndexStream.listen((index) {
+      if (index != null && index >= 0 && index < queue.value.length) {
+        mediaItem.add(queue.value[index]);
+        // แอบโหลดลิงก์เพลงถัดไป 1-2 เพลงส่งไปแคชไว้ที่ API Server แบบเบื้องหลัง
+        _preCacheNextTracksInServer(index);
       }
     });
   }
 
-  Future<void> _handleSongComplete() async {
-    _isTransitioning = true;
-    try {
-      if (_repeatMode == AudioServiceRepeatMode.one) {
-        await _player.seek(Duration.zero);
-        await _player.play();
-      } else {
-        await skipToNext();
+  Future<void> _preCacheNextTracksInServer(int currentIndex) async {
+    for (int offset = 1; offset <= 2; offset++) {
+      int nextIndex = currentIndex + offset;
+      if (nextIndex < queue.value.length) {
+        final songId = queue.value[nextIndex].id;
+        try {
+          await ApiService().getAudioUrl(songId);
+        } catch (_) {}
       }
-    } finally {
-      _isTransitioning = false;
     }
   }
 
-  Future<void> _retryCurrentSong() async {
-    _isTransitioning = true;
-    try {
-      if (_currentIndex >= 0 && _currentIndex < queue.value.length) {
-        final item = queue.value[_currentIndex];
-        _urlCache.remove(item.id);
-        
-        final duration = _player.position; 
-        await _playCurrentQueueItem(seekPosition: duration);
-      }
-    } catch (e) {
-      print("Retry failed: $e");
-    } finally {
-      _isTransitioning = false;
-    }
-  }
+  // =============================================
+  // ระบบเล่นเพลง & โหลดคิว
+  // =============================================
 
+  @override
   Future<void> playSong(Song song) async {
     final item = _songToMediaItem(song);
-    
-    final existingIndex = queue.value.indexWhere((i) => i.id == song.id);
-    if (existingIndex != -1) {
-      _currentIndex = existingIndex;
-    } else {
-      queue.add([item]);
-      _currentIndex = 0;
-    }
-    
-    await _playCurrentQueueItem();
-  }
+    int existingIndex = queue.value.indexWhere((i) => i.id == song.id);
 
-  Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
-    if (songs.isEmpty) return;
-    
-    final items = songs.map(_songToMediaItem).toList();
-    queue.add(items);
-    _currentIndex = initialIndex >= 0 && initialIndex < items.length ? initialIndex : 0;
-    
-    await _playCurrentQueueItem();
+    // 🚀 อัพเดท UI ทันทีไม่ต้องรอโหลด เพื่อไม่ให้หน้าเพลย์เยอร์หายหรือค้าง
+    mediaItem.add(item);
+
+    if (existingIndex != -1) {
+      // มีอยู่ในคิวแล้ว ให้เล่นเลย
+      await _player.seek(Duration.zero, index: existingIndex);
+      _player.play();
+    } else {
+      // เพิ่มเข้าคิวใหม่
+      final currentQueue = List<MediaItem>.from(queue.value);
+      currentQueue.add(item);
+      queue.add(currentQueue);
+
+      final source = AudioSource.uri(
+        Uri.parse(ApiConfig.streamUrl(song.id)),
+        tag: item,
+        headers: {'User-Agent': 'Mozilla/5.0'}
+      );
+
+      await _playlist.add(source);
+
+      // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
+      ApiService().getAudioUrl(song.id).catchError((_) => null);
+
+      await _player.seek(Duration.zero, index: currentQueue.length - 1);
+      _player.play();
+    }
   }
 
   @override
-  Future<void> skipToNext() async {
-    if (queue.value.isEmpty) return;
-    
-    _isTransitioning = true;
-    try {
-      if (_currentIndex < queue.value.length - 1) {
-        _currentIndex++;
-        await _playCurrentQueueItem();
-      } else if (_repeatMode == AudioServiceRepeatMode.all || _repeatMode == AudioServiceRepeatMode.group) {
-        _currentIndex = 0;
-        await _playCurrentQueueItem();
-      } else {
-        await _player.stop();
-      }
-    } finally {
-      _isTransitioning = false;
+  Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
+    if (songs.isEmpty) return;
+
+    final items = songs.map(_songToMediaItem).toList();
+    queue.add(items);
+
+    if (initialIndex >= 0 && initialIndex < items.length) {
+       // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที" 
+       mediaItem.add(items[initialIndex]);
+       
+       // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (ไม่ต้องบล็อก UI)
+       ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
     }
+
+    final sources = songs.map((s) {
+      return AudioSource.uri(
+        Uri.parse(ApiConfig.streamUrl(s.id)),
+        tag: _songToMediaItem(s),
+        headers: {'User-Agent': 'Mozilla/5.0'}
+      );
+    }).toList();
+
+    await _playlist.clear();
+    await _playlist.addAll(sources);
+
+    if (initialIndex >= 0 && initialIndex < sources.length) {
+      await _player.seek(Duration.zero, index: initialIndex);
+      _player.play();
+    }
+  }
+
+  // =============================================
+  // การเปลี่ยนเพลง
+  // =============================================
+
+  @override
+  Future<void> skipToNext() async {
+    final nextIndex = (_player.currentIndex ?? 0) + 1;
+    if (nextIndex < queue.value.length) {
+       mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
+    }
+    await _player.seekToNext();
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (queue.value.isEmpty) return;
-    
-    _isTransitioning = true;
-    try {
-      if (_player.position > const Duration(seconds: 3)) {
-        await _player.seek(Duration.zero);
-      } else if (_currentIndex > 0) {
-        _currentIndex--;
-        await _playCurrentQueueItem();
-      } else if (_repeatMode == AudioServiceRepeatMode.all) {
-        _currentIndex = queue.value.length - 1;
-        await _playCurrentQueueItem();
-      } else {
-        await _player.seek(Duration.zero);
+    if (_player.position > const Duration(seconds: 3)) {
+      await _player.seek(Duration.zero);
+    } else {
+      final prevIndex = (_player.currentIndex ?? 0) - 1;
+      if (prevIndex >= 0) {
+         mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
       }
-    } finally {
-      _isTransitioning = false;
+      await _player.seekToPrevious();
     }
   }
 
   @override
   Future<void> skipToQueueItem(int index) async {
     if (index >= 0 && index < queue.value.length) {
-      _currentIndex = index;
-      await _playCurrentQueueItem();
-    }
-  }
-  
-  Future<void> _playCurrentQueueItem({Duration seekPosition = Duration.zero}) async {
-    if (_currentIndex < 0 || _currentIndex >= queue.value.length) return;
-    
-    final item = queue.value[_currentIndex];
-    mediaItem.add(item);
-    
-    try {
-      String url;
-      if (_urlCache.containsKey(item.id)) {
-        url = _urlCache[item.id]!;
-      } else {
-        String? directUrl = await ApiService().getAudioUrl(item.id);
-        if (directUrl != null) {
-          url = directUrl;
-          _urlCache[item.id] = directUrl;
-        } else {
-          url = ApiConfig.streamUrl(item.id);
-        }
-      }
-
-      final source = AudioSource.uri(
-        Uri.parse(url), 
-        tag: item,
-      );
-
-      await _player.setAudioSource(source, initialPosition: seekPosition);
-      await _player.play();
-      
-      _preResolveNextTrack();
-
-    } catch (e) {
-      print('❌ Audio Load Error: $e');
-      await Future.delayed(const Duration(seconds: 1));
-      skipToNext();
-    }
-  }
-
-  Future<void> _preResolveNextTrack() async {
-    if (_currentIndex + 1 < queue.value.length) {
-      final nextItem = queue.value[_currentIndex + 1];
-      if (!_urlCache.containsKey(nextItem.id)) {
-        try {
-          String? directUrl = await ApiService().getAudioUrl(nextItem.id);
-          if (directUrl != null) {
-            _urlCache[nextItem.id] = directUrl;
-          }
-        } catch (_) {}
-      }
+      mediaItem.add(queue.value[index]); // โชว์ใน UI ทันทีที่กดเลือกเพลง
+      await _player.seek(Duration.zero, index: index);
+      _player.play();
     }
   }
 
   @override
   Future<void> setRepeatMode(AudioServiceRepeatMode repeatMode) async {
-    _repeatMode = repeatMode;
+    switch (repeatMode) {
+      case AudioServiceRepeatMode.none:
+        await _player.setLoopMode(LoopMode.off);
+        break;
+      case AudioServiceRepeatMode.one:
+        await _player.setLoopMode(LoopMode.one);
+        break;
+      case AudioServiceRepeatMode.all:
+      case AudioServiceRepeatMode.group:
+        await _player.setLoopMode(LoopMode.all);
+        break;
+    }
+  }
+
+  @override
+  Future<void> setShuffleMode(AudioServiceShuffleMode shuffleMode) async {
+    if (shuffleMode == AudioServiceShuffleMode.none) {
+      await _player.setShuffleModeEnabled(false);
+    } else {
+      await _player.setShuffleModeEnabled(true);
+    }
   }
 
   @override
@@ -261,6 +239,7 @@ class MyAudioHandler extends BaseAudioHandler {
         MediaAction.seekForward,
         MediaAction.seekBackward,
         MediaAction.setRepeatMode,
+        MediaAction.setShuffleMode,
       },
       androidCompactActionIndices: const [0, 1, 3],
       processingState: const {
@@ -274,7 +253,7 @@ class MyAudioHandler extends BaseAudioHandler {
       updatePosition: _player.position,
       bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
-      queueIndex: _currentIndex,
+      queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
     ));
   }
 }
