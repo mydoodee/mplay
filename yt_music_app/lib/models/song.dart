@@ -5,6 +5,22 @@ class Song {
   final String thumbnail;
   final int duration;
 
+  // Always returns a valid YouTube thumbnail URL (16:9, for lists)
+  String get thumbnailUrl {
+    if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
+      return thumbnail;
+    }
+    return 'https://i.ytimg.com/vi/$id/mqdefault.jpg';
+  }
+
+  // High-quality thumbnail for player screen (hqdefault = 480×360, closer to square)
+  String get hqThumbnailUrl {
+    if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
+      return thumbnail;
+    }
+    return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
+  }
+
   Song({
     required this.id,
     required this.title,

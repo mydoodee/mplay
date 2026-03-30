@@ -5,7 +5,12 @@ import 'package:audio_service/audio_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../main.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/music_visualizer.dart';
 import '../services/song_provider.dart';
+import '../utils/playlist_utils.dart';
+import '../widgets/song_tile.dart';
+import '../models/song.dart';
+
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({super.key});
@@ -39,25 +44,24 @@ class PlayerScreen extends StatelessWidget {
           icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 30, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const AppLogo(size: 20, showText: true),
+        title: const AppLogo(size: 26, showText: true),
         centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF888888), size: 22),
-            onPressed: () {},
+            onPressed: () => _showPlayerMenu(context, songProvider, currentSong),
           ),
+
         ],
       ),
       body: Stack(
         children: [
           // 🎵 Dynamic Blurred Background
           Positioned.fill(
-            child: currentSong.thumbnail.isNotEmpty && currentSong.thumbnail != "NA"
-                ? CachedNetworkImage(
-                    imageUrl: currentSong.thumbnail,
-                    fit: BoxFit.cover,
-                  )
-                : Container(color: Colors.black),
+            child: CachedNetworkImage(
+                imageUrl: currentSong.thumbnailUrl,
+                fit: BoxFit.cover,
+              ),
           ),
           Positioned.fill(
             child: BackdropFilter(
@@ -85,15 +89,14 @@ class PlayerScreen extends StatelessWidget {
               children: [
                 const Spacer(flex: 1),
                 
-                // 🎵 Album Art — shadow สวยขึ้น
+                // 🎵 Album Art
                 Hero(
                   tag: 'album_art_${currentSong.id}',
                   child: Center(
                     child: Container(
-                      width: MediaQuery.of(context).size.width * 0.75,
-                      height: MediaQuery.of(context).size.width * 0.75,
+                      width: MediaQuery.of(context).size.width * 0.88,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.6),
@@ -103,16 +106,31 @@ class PlayerScreen extends StatelessWidget {
                         ],
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: currentSong.thumbnail.isNotEmpty && currentSong.thumbnail != "NA"
-                            ? CachedNetworkImage(
-                                imageUrl: currentSong.thumbnail,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(
-                                color: const Color(0xFF1A1A1A),
-                                child: const Icon(Icons.music_note, size: 80, color: Color(0xFF333333)),
+                        borderRadius: BorderRadius.circular(16),
+                        child: AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: CachedNetworkImage(
+                            imageUrl: currentSong.hqThumbnailUrl,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(
+                              color: const Color(0xFF1A1A1A),
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFF15A24),
+                                  strokeWidth: 2,
+                                ),
                               ),
+                            ),
+                            errorWidget: (_, __, ___) => Container(
+                              color: const Color(0xFF1A1A1A),
+                              child: const Icon(
+                                Icons.music_note_rounded,
+                                color: Color(0xFF333333),
+                                size: 60,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -348,16 +366,21 @@ class PlayerScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       TextButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.playlist_play_rounded, color: Color(0xFF777777), size: 20),
-                        label: const Text('รายการถัดไป', style: TextStyle(color: Color(0xFF777777), fontSize: 12)),
+                        onPressed: () => _showQueueSheet(context, songProvider),
+                        icon: const Icon(Icons.playlist_play_rounded, color: Color(0xFFBBBBBB), size: 20),
+                        label: const Text('รายการถัดไป', style: TextStyle(color: Color(0xFFBBBBBB), fontSize: 13, fontWeight: FontWeight.w500)),
                       ),
                       const SizedBox(width: 32),
                       TextButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.lyrics_outlined, color: Color(0xFF777777), size: 20),
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('ฟีเจอร์เนื้อเพลงเร็วๆ นี้'), behavior: SnackBarBehavior.floating)
+                          );
+                        },
+                        icon: const Icon(Icons.lyrics_outlined, color: Color(0xFF777777), size: 18),
                         label: const Text('เนื้อเพลง', style: TextStyle(color: Color(0xFF777777), fontSize: 12)),
                       ),
+
                     ],
                   ),
                 ),
@@ -366,6 +389,125 @@ class PlayerScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showPlayerMenu(BuildContext context, SongProvider provider, Song song) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: const Color(0xFF333333), borderRadius: BorderRadius.circular(2)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add_rounded, color: Colors.white),
+              title: const Text('เพิ่มลงในเพลย์ลิสต์', style: TextStyle(color: Colors.white)),
+              onTap: () {
+                Navigator.pop(ctx);
+                PlaylistUtils.showAddToPlaylistSheet(context, song);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_rounded, color: Colors.white),
+              title: const Text('แชร์เพลงนี้', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx),
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline_rounded, color: Colors.white),
+              title: const Text('ข้อมูลเพลง', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(ctx),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showQueueSheet(BuildContext context, SongProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StreamBuilder<List<MediaItem>>(
+          stream: audioHandler?.queue,
+          builder: (context, snapshot) {
+            final queue = snapshot.data ?? [];
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.75,
+              decoration: const BoxDecoration(
+                color: Color(0xFF111111),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 16),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFF333333), borderRadius: BorderRadius.circular(2)),
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.playlist_play_rounded, color: Color(0xFFF15A24), size: 24),
+                        SizedBox(width: 12),
+                        Text('รายการเพลงที่เล่นอยู่', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                      ],
+                    ),
+                  ),
+                  const Divider(color: Color(0xFF222222)),
+                  Expanded(
+                    child: queue.isEmpty
+                        ? const Center(child: Text('ไม่มีเพลงในรายการ', style: TextStyle(color: Color(0xFF555555))))
+                        : ListView.builder(
+                            itemCount: queue.length,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            itemBuilder: (context, index) {
+                              final item = queue[index];
+                              final song = Song(
+                                id: item.id,
+                                title: item.title,
+                                artist: item.artist ?? '',
+                                thumbnail: item.artUri?.toString() ?? '',
+                                duration: item.duration?.inSeconds ?? 0,
+                              );
+                              
+                              final isCurrent = provider.currentSong?.id == song.id;
+
+                              return Opacity(
+                                opacity: isCurrent ? 1.0 : 0.7,
+                                child: SongTile(
+                                  song: song,
+                                  isFavorite: false, // Simplifying for queue
+                                  onFavoritePressed: () => provider.toggleFavorite(song),
+                                  onTap: () {
+                                    audioHandler?.skipToQueueItem(index);
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

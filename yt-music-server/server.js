@@ -101,12 +101,17 @@ app.get('/api/search', async (req, res) => {
 
     const results = lines.map(line => {
       const [id, title, artist, duration, thumbnail] = line.split('\t');
+      const cleanId = (id || '').trim();
+      // Always use YouTube standard thumbnail — reliable 100% of the time
+      const thumb = (thumbnail && thumbnail.startsWith('http'))
+        ? thumbnail
+        : `https://i.ytimg.com/vi/${cleanId}/mqdefault.jpg`;
       return {
-        id: id || '',
+        id: cleanId,
         title: title || 'ไม่ระบุชื่อเพลง',
         artist: artist || 'ไม่ระบุชื่อศิลปิน',
         duration: parseInt(duration) || 0,
-        thumbnail: thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+        thumbnail: thumb
       };
     }).filter(item => item.id);
 
@@ -137,13 +142,17 @@ app.get('/api/info/:videoId', async (req, res) => {
 
     const output = await runYtDlp(args);
     const [id, title, artist, duration, thumbnail, viewCount] = output.split('\t');
+    const cleanId = (id || '').trim();
+    const thumb = (thumbnail && thumbnail.startsWith('http'))
+      ? thumbnail
+      : `https://i.ytimg.com/vi/${cleanId}/mqdefault.jpg`;
 
     res.json({
-      id,
+      id: cleanId,
       title: title || 'Unknown',
       artist: artist || 'Unknown',
       duration: parseInt(duration) || 0,
-      thumbnail: thumbnail || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      thumbnail: thumb,
       viewCount: parseInt(viewCount) || 0
     });
 
