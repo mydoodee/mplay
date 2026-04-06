@@ -5,7 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'dart:io';
 import 'services/audio_handler.dart';
 import 'services/song_provider.dart';
-import 'screens/home_screen.dart';
+import 'services/equalizer_provider.dart';
 import 'screens/splash_screen.dart';
 
 // Global audio handler (nullable to prevent LateInitializationError)
@@ -13,7 +13,7 @@ MyAudioHandler? audioHandler;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   if (Platform.isWindows || Platform.isLinux) {
     try {
       sqfliteFfiInit();
@@ -22,7 +22,7 @@ Future<void> main() async {
       // Ignore if not on desktop
     }
   }
-  
+
   try {
     // Initialize audio handler
     audioHandler = await AudioService.init(
@@ -44,6 +44,8 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SongProvider()),
+        if (audioHandler != null)
+          ChangeNotifierProvider(create: (_) => EqualizerProvider(audioHandler!)),
       ],
       child: const MyApp(),
     ),

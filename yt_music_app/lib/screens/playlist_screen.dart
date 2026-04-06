@@ -184,6 +184,7 @@ class PlaylistScreen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 12.0),
                           child: SongTile(
                             song: song,
+                            isPlaying: provider.currentSong?.id == song.id,
                             isFavorite: isFavorite,
                             onFavoritePressed: () => provider.toggleFavorite(song),
                             onTap: () => provider.playSong(song, queue: songs, index: index),

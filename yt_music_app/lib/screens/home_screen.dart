@@ -11,6 +11,7 @@ import '../widgets/glowing_ring.dart';
 import '../services/song_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/playlist_utils.dart';
+import 'equalizer_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -88,9 +89,30 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             actions: [
-              IconButton(
+              PopupMenuButton<String>(
                 icon: const Icon(Icons.settings_outlined, color: Color(0xFF777777), size: 22),
-                onPressed: () {},
+                color: const Color(0xFF1A1A1A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                onSelected: (value) {
+                  if (value == 'equalizer') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const EqualizerScreen()),
+                    );
+                  }
+                },
+                itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem<String>(
+                    value: 'equalizer',
+                    child: Row(
+                      children: [
+                        Icon(Icons.tune_rounded, color: Colors.white, size: 20),
+                        SizedBox(width: 12),
+                        Text('ปรับ Equalizer', style: TextStyle(color: Colors.white, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -230,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: SongTile(
                       song: song,
+                      isPlaying: songProvider.currentSong?.id == song.id,
                       isFavorite: isFavorite,
                       onFavoritePressed: () => songProvider.toggleFavorite(song),
                       onTap: () => songProvider.playSong(song, queue: songProvider.history, index: index),
@@ -251,6 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: SongTile(
                       song: song,
+                      isPlaying: songProvider.currentSong?.id == song.id,
                       isFavorite: isFavorite,
                       onFavoritePressed: () => songProvider.toggleFavorite(song),
                       onTap: () => songProvider.playSong(song, queue: list, index: index),

@@ -6,30 +6,37 @@ import '../config/api_config.dart';
 import 'api_service.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
+  final equalizer = AndroidEqualizer();
+  final loudnessEnhancer = AndroidLoudnessEnhancer();
+
   // สร้าง Player พร้อมตั้งค่าให้โหลด Buffer เพลงเก็บไว้ล่วงหน้าเยอะๆ (5-10 นาที) เพื่อไม่ให้เพลงหยุดกลางคัน
-  final _player = AudioPlayer(
-    audioLoadConfiguration: AudioLoadConfiguration(
-      androidLoadControl: AndroidLoadControl(
-        minBufferDuration: const Duration(minutes: 5),   
-        maxBufferDuration: const Duration(minutes: 10),    
-        bufferForPlaybackDuration: const Duration(seconds: 2), 
-        bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3), 
-        targetBufferBytes: 1024 * 1024 * 50, 
-      ),
-      darwinLoadControl: DarwinLoadControl(
-        preferredForwardBufferDuration: const Duration(minutes: 5),
-        automaticallyWaitsToMinimizeStalling: true,
-      ),
-    ),
-  );
+  late final AudioPlayer _player;
 
   // ใช้ ConcatenatingAudioSource เพื่อระบบ Gapless Playback
   final _playlist = ConcatenatingAudioSource(children: []);
   Timer? _positionTimer;
 
   MyAudioHandler() {
+    _player = AudioPlayer(
+      audioPipeline: AudioPipeline(androidAudioEffects: [equalizer, loudnessEnhancer]),
+      audioLoadConfiguration: AudioLoadConfiguration(
+        androidLoadControl: AndroidLoadControl(
+          minBufferDuration: const Duration(minutes: 5),   
+          maxBufferDuration: const Duration(minutes: 10),    
+          bufferForPlaybackDuration: const Duration(seconds: 2), 
+          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3), 
+          targetBufferBytes: 1024 * 1024 * 50, 
+        ),
+        darwinLoadControl: DarwinLoadControl(
+          preferredForwardBufferDuration: const Duration(minutes: 5),
+          automaticallyWaitsToMinimizeStalling: true,
+        ),
+      ),
+    );
     _init();
   }
+
+
 
   Future<void> _init() async {
     await _player.setAudioSource(_playlist);

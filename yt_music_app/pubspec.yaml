@@ -2,7 +2,7 @@ name: yt_music_app
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -16,10 +16,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
-  sdk: ^3.10.8
+  sdk: ^3.11.4
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -34,28 +34,29 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  
+
   # Audio Playback
   just_audio: ^0.9.36
   just_audio_windows: ^0.2.2
   audio_service: ^0.18.12
-  
+
   # Database (SQLite)
   sqflite: ^2.3.0
   sqflite_common_ffi: ^2.3.0+2
   sqlite3_flutter_libs: ^0.5.20
   path: ^1.8.3
-  
+
   # Networking
   http: ^1.1.0
   cached_network_image: ^3.3.0
-  
+
   # State Management
   provider: ^6.0.5
-  
+
   # Utils
   google_fonts: ^6.2.1
   intl: ^0.18.1
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
@@ -74,7 +75,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
