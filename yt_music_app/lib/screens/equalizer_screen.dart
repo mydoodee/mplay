@@ -36,124 +36,95 @@ class EqualizerScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // Switch to enable/disable equalizer
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'เปิดใช้งาน Equalizer',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                Switch(
-                  value: eqProvider.isEqualizerEnabled,
-                  onChanged: (val) {
-                    eqProvider.setEnabled(val);
-                  },
-                  activeColor: const Color(0xFFF15A24),
-                  inactiveThumbColor: const Color(0xFF777777),
-                  inactiveTrackColor: const Color(0xFF333333),
-                ),
-              ],
-            ),
-          ),
-          const Divider(color: Color(0xFF222222), height: 1),
           const SizedBox(height: 24),
           
           Expanded(
-            child: Opacity(
-              opacity: eqProvider.isEqualizerEnabled ? 1.0 : 0.4,
-              child: IgnorePointer(
-                ignoring: !eqProvider.isEqualizerEnabled,
-                child: Column(
-                  children: [
-                    // Presets
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: eqProvider.presets.map((preset) {
-                          final isSelected = preset == eqProvider.selectedPreset;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 12),
-                            child: ChoiceChip(
-                              label: Text(preset),
-                              selected: isSelected,
-                              showCheckmark: false,
-                              onSelected: (selected) {
-                                if (selected) {
-                                  eqProvider.setPreset(preset);
-                                }
-                              },
-                              backgroundColor: const Color(0xFF1A1A1A),
-                              selectedColor: const Color(0xFFF15A24).withValues(alpha: 0.15),
-                              labelStyle: TextStyle(
-                                color: isSelected ? const Color(0xFFF15A24) : const Color(0xFFAAAAAA),
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                                side: BorderSide(
-                                  color: isSelected ? const Color(0xFFF15A24).withValues(alpha: 0.5) : const Color(0xFF333333),
-                                ),
-                              ),
+            child: Column(
+              children: [
+                // Presets
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: eqProvider.presets.map((preset) {
+                      final isSelected = preset == eqProvider.selectedPreset;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: ChoiceChip(
+                          label: Text(preset),
+                          selected: isSelected,
+                          showCheckmark: false,
+                          onSelected: (selected) {
+                            if (selected) {
+                              eqProvider.setPreset(preset);
+                            }
+                          },
+                          backgroundColor: const Color(0xFF1A1A1A),
+                          selectedColor: const Color(0xFFF15A24).withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            color: isSelected ? const Color(0xFFF15A24) : const Color(0xFFAAAAAA),
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected ? const Color(0xFFF15A24).withValues(alpha: 0.5) : const Color(0xFF333333),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 48),
-                    
-                    // Sliders
-                    Expanded(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(eqProvider.bands.length, (index) {
-                          return _buildSlider(context, eqProvider, index);
-                        }),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    
-                    // Bass Booster
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Column(
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 48),
+                
+                // Sliders
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(eqProvider.bands.length, (index) {
+                      return _buildSlider(context, eqProvider, index);
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                
+                // Bass Booster
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Bass Booster', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                              Text('${eqProvider.bassBoosterLevel.round()}%', style: const TextStyle(color: Color(0xFFF15A24), fontSize: 16, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: const Color(0xFFF15A24),
-                              inactiveTrackColor: const Color(0xFF2A2A2A),
-                              thumbColor: Colors.white,
-                              overlayColor: const Color(0xFFF15A24).withValues(alpha: 0.2),
-                              trackHeight: 6,
-                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-                            ),
-                            child: Slider(
-                              value: eqProvider.bassBoosterLevel,
-                              min: 0,
-                              max: 100,
-                              onChanged: (val) {
-                                eqProvider.setBassBoosterLevel(val);
-                              },
-                            ),
-                          ),
+                          const Text('Bass Booster', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text('${eqProvider.bassBoosterLevel.round()}%', style: const TextStyle(color: Color(0xFFF15A24), fontSize: 16, fontWeight: FontWeight.w700)),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 40),
-                  ],
+                      const SizedBox(height: 8),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          activeTrackColor: const Color(0xFFF15A24),
+                          inactiveTrackColor: const Color(0xFF2A2A2A),
+                          thumbColor: Colors.white,
+                          overlayColor: const Color(0xFFF15A24).withValues(alpha: 0.2),
+                          trackHeight: 6,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                        ),
+                        child: Slider(
+                          value: eqProvider.bassBoosterLevel,
+                          min: 0,
+                          max: 100,
+                          onChanged: (val) {
+                            eqProvider.setBassBoosterLevel(val);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 40),
+              ],
             ),
           ),
         ],
