@@ -16,6 +16,15 @@ class SongProvider with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  bool _isFetchingMore = false;
+  bool get isFetchingMore => _isFetchingMore;
+
+  bool _hasMoreResults = true;
+  bool get hasMoreResults => _hasMoreResults;
+
+  String _currentSearchQuery = '';
+  final int _pageSize = 20;
+
   Song? _currentSong;
   Song? get currentSong => _currentSong;
 
@@ -58,12 +67,46 @@ class SongProvider with ChangeNotifier {
 
   Future<void> search(String query) async {
     if (query.isEmpty) return;
+    _currentSearchQuery = query;
     _isLoading = true;
+    _hasMoreResults = true;
     _searchResults = [];
     notifyListeners();
     
-    _searchResults = await _apiService.searchSongs(query);
+    final results = await _apiService.searchSongs(query, limit: _pageSize, offset: 0);
+    _searchResults = results;
+    
+    if (results.length < _pageSize) {
+      _hasMoreResults = false;
+    }
+    
     _isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> searchMore() async {
+    if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) return;
+    
+    _isFetchingMore = true;
+    notifyListeners();
+    
+    final currentOffset = _searchResults.length;
+    final moreResults = await _apiService.searchSongs(
+      _currentSearchQuery, 
+      limit: _pageSize, 
+      offset: currentOffset,
+    );
+    
+    if (moreResults.isEmpty) {
+      _hasMoreResults = false;
+    } else {
+      _searchResults.addAll(moreResults);
+      if (moreResults.length < _pageSize) {
+        _hasMoreResults = false;
+      }
+    }
+    
+    _isFetchingMore = false;
     notifyListeners();
   }
 

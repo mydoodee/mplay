@@ -23,8 +23,27 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
+  void _onScroll() {
+    // โหลดข้อมูลเพิ่มเฉพาะในหน้าค้นหา (index 0)
+    if (_selectedIndex == 0) {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        final songProvider = Provider.of<SongProvider>(context, listen: false);
+        if (songProvider.searchResults.isNotEmpty) {
+          songProvider.searchMore();
+        }
+      }
+    }
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -34,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -56,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           // 🎵 Premium App Bar
           SliverAppBar(
@@ -89,30 +110,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             actions: [
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.settings_outlined, color: Color(0xFF777777), size: 22),
-                color: const Color(0xFF1A1A1A),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                onSelected: (value) {
-                  if (value == 'equalizer') {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const EqualizerScreen()),
-                    );
-                  }
+              IconButton(
+                icon: const Icon(Icons.tune_rounded, color: Color(0xFF777777), size: 22),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const EqualizerScreen()),
+                  );
                 },
-                itemBuilder: (BuildContext context) => [
-                  const PopupMenuItem<String>(
-                    value: 'equalizer',
-                    child: Row(
-                      children: [
-                        Icon(Icons.tune_rounded, color: Colors.white, size: 20),
-                        SizedBox(width: 12),
-                        Text('ปรับ Equalizer', style: TextStyle(color: Colors.white, fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -282,6 +287,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
                 childCount: results.length,
+              ),
+            ),
+          if (_selectedIndex == 0 && songProvider.isFetchingMore)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFF15A24),
+                    strokeWidth: 2,
+                  ),
+                ),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 120)),

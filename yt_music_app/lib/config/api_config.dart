@@ -6,14 +6,11 @@ class ApiConfig {
     return _productionUrl;
   }
 
-  // ค้นหาเพลง
-  static String searchUrl(String query) =>
-      '$baseUrl/search?q=${Uri.encodeComponent(query)}';
-
-  // ดึงข้อมูลเพลง
+  static String searchUrl(String query, {int limit = 20, int offset = 0}) =>
+      '$baseUrl/search?q=${Uri.encodeComponent(query)}&limit=$limit&offset=$offset';
+  static String streamUrl(String videoId) => '$baseUrl/stream/$videoId';
   static String infoUrl(String videoId) => '$baseUrl/info/$videoId';
 
   // ✅ Stream audio ผ่าน Server
   // Server ทำการ resolve URL จาก YouTube และส่งต่อไป
-  static String streamUrl(String videoId) => '$baseUrl/stream/$videoId';
 }

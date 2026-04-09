@@ -44,7 +44,16 @@ module.exports = {
       },
       autorestart: true,
       watch: false,
-      max_memory_restart: '512M'
+      max_memory_restart: '512M',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      error_file: '/var/www/srvmusic/logs/error.log',
+      out_file: '/var/www/srvmusic/logs/out.log',
+      combine_logs: true,
+      time: true,
+      autorestart: true,
+      restart_delay: 5000,
+      max_restarts: 10,
+      min_uptime: 10000,
     }
   ]
 };
