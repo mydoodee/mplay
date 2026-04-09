@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:provider/provider.dart';
 import '../models/song.dart';
-import '../services/song_provider.dart';
 import '../widgets/app_logo.dart';
 import '../utils/playlist_utils.dart';
-
+import '../widgets/mini_equalizer.dart';
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -13,6 +11,7 @@ class SongTile extends StatelessWidget {
   final bool isFavorite;
   final VoidCallback onFavoritePressed;
   final VoidCallback? onRemoveFromPlaylist;
+  final bool isPlaying;
 
   const SongTile({
     super.key,
@@ -21,6 +20,7 @@ class SongTile extends StatelessWidget {
     this.isFavorite = false,
     required this.onFavoritePressed,
     this.onRemoveFromPlaylist,
+    this.isPlaying = false,
   });
 
   String _formatDuration(int seconds) {
@@ -53,7 +53,7 @@ class SongTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            
+
             // Song info header
             Padding(
               padding: const EdgeInsets.all(16),
@@ -62,11 +62,11 @@ class SongTile extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: CachedNetworkImage(
-                        imageUrl: song.thumbnailUrl,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                      ),
+                      imageUrl: song.thumbnailUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -77,14 +77,21 @@ class SongTile extends StatelessWidget {
                           song.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           song.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 12),
+                          style: const TextStyle(
+                            color: Color(0xFFAAAAAA),
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -92,22 +99,29 @@ class SongTile extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             const Divider(color: Color(0xFF2A2A2A), height: 1),
-            
+
             // Menu items
             _menuItem(ctx, Icons.play_arrow_rounded, 'เล่นเพลงนี้', () {
               Navigator.pop(ctx);
               onTap();
             }),
-            _menuItem(ctx, Icons.playlist_add_rounded, 'เพิ่มลงในเพลย์ลิสต์', () {
-              Navigator.pop(ctx);
-              PlaylistUtils.showAddToPlaylistSheet(context, song);
-            }),
+            _menuItem(
+              ctx,
+              Icons.playlist_add_rounded,
+              'เพิ่มลงในเพลย์ลิสต์',
+              () {
+                Navigator.pop(ctx);
+                PlaylistUtils.showAddToPlaylistSheet(context, song);
+              },
+            ),
 
             _menuItem(
               ctx,
-              isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              isFavorite
+                  ? Icons.favorite_rounded
+                  : Icons.favorite_border_rounded,
               isFavorite ? 'ลบออกจากเพลงที่ชอบ' : 'เพิ่มในเพลงที่ชอบ',
               () {
                 Navigator.pop(ctx);
@@ -117,9 +131,9 @@ class SongTile extends StatelessWidget {
             ),
             if (onRemoveFromPlaylist != null)
               _menuItem(
-                ctx, 
-                Icons.delete_outline_rounded, 
-                'ลบออกจากเพลย์ลิสต์', 
+                ctx,
+                Icons.delete_outline_rounded,
+                'ลบออกจากเพลย์ลิสต์',
                 () {
                   Navigator.pop(ctx);
                   onRemoveFromPlaylist!();
@@ -134,7 +148,7 @@ class SongTile extends StatelessWidget {
               Navigator.pop(ctx);
               _showSongInfo(context);
             }),
-            
+
             const SizedBox(height: 16),
           ],
         ),
@@ -142,16 +156,28 @@ class SongTile extends StatelessWidget {
     );
   }
 
-  Widget _menuItem(BuildContext context, IconData icon, String label, VoidCallback onTap, {Color? iconColor}) {
+  Widget _menuItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    Color? iconColor,
+  }) {
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? const Color(0xFFBBBBBB), size: 22),
-      title: Text(label, style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 14)),
+      leading: Icon(
+        icon,
+        color: iconColor ?? const Color(0xFFBBBBBB),
+        size: 22,
+      ),
+      title: Text(
+        label,
+        style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 14),
+      ),
       onTap: onTap,
       dense: true,
       visualDensity: VisualDensity.compact,
     );
   }
-
 
   void _showSongInfo(BuildContext context) {
     showDialog(
@@ -159,7 +185,10 @@ class SongTile extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('ข้อมูลเพลง', style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text(
+          'ข้อมูลเพลง',
+          style: TextStyle(color: Colors.white, fontSize: 16),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +205,10 @@ class SongTile extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('ปิด', style: TextStyle(color: Color(0xFFF15A24))),
+            child: const Text(
+              'ปิด',
+              style: TextStyle(color: Color(0xFFF15A24)),
+            ),
           ),
         ],
       ),
@@ -187,9 +219,15 @@ class SongTile extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Color(0xFF777777), fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFF777777), fontSize: 11),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13)),
+        Text(
+          value,
+          style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13),
+        ),
       ],
     );
   }
@@ -199,7 +237,7 @@ class SongTile extends StatelessWidget {
     final durationText = _formatDuration(song.duration);
 
     return Material(
-      color: Colors.transparent,
+      color: isPlaying ? const Color(0xFFF15A24).withValues(alpha: 0.1) : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         splashColor: const Color(0xFFF15A24).withValues(alpha: 0.06),
@@ -249,7 +287,10 @@ class SongTile extends StatelessWidget {
                     bottom: 4,
                     right: 4,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(3),
@@ -298,16 +339,31 @@ class SongTile extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            song.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              height: 1.35,
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (isPlaying)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 2, right: 6),
+                                  child: MiniEqualizer(
+                                    color: Color(0xFFF15A24),
+                                    size: 14,
+                                  ),
+                                ),
+                              Expanded(
+                                child: Text(
+                                  song.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: isPlaying ? FontWeight.w600 : FontWeight.w500,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 5),
                           Text(

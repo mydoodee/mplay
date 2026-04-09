@@ -17,10 +17,10 @@ class ApiService {
   static const Duration _urlTimeout = Duration(seconds: 15);
   static const Duration _infoTimeout = Duration(seconds: 15);
 
-  Future<List<Song>> searchSongs(String query) async {
+  Future<List<Song>> searchSongs(String query, {int limit = 20, int offset = 0}) async {
     try {
       final response = await _client
-          .get(Uri.parse(ApiConfig.searchUrl(query)))
+          .get(Uri.parse(ApiConfig.searchUrl(query, limit: limit, offset: offset)))
           .timeout(_searchTimeout);
       
       if (response.statusCode == 200) {
