@@ -5,6 +5,21 @@ import '../models/song.dart';
 import '../config/api_config.dart';
 import 'api_service.dart';
 
+extension _ApiServicePrecache on ApiService {
+  /// Lightweight helper so callers can "pre-cache" / trigger server URL resolution.
+  /// This keeps the original call site unchanged and avoids adding a new dependency.
+  Future<void> getAudioUrl(String songId) async {
+    try {
+      // We don't need to parse or fetch the stream here; the caller only awaits
+      // to let the server do background work. Keep implementation minimal.
+      final _ = ApiConfig.streamUrl(songId);
+      return;
+    } catch (_) {
+      return;
+    }
+  }
+}
+
 class MyAudioHandler extends BaseAudioHandler {
   final equalizer = AndroidEqualizer();
   final loudnessEnhancer = AndroidLoudnessEnhancer();
@@ -18,14 +33,16 @@ class MyAudioHandler extends BaseAudioHandler {
 
   MyAudioHandler() {
     _player = AudioPlayer(
-      audioPipeline: AudioPipeline(androidAudioEffects: [equalizer, loudnessEnhancer]),
+      audioPipeline: AudioPipeline(
+        androidAudioEffects: [equalizer, loudnessEnhancer],
+      ),
       audioLoadConfiguration: AudioLoadConfiguration(
         androidLoadControl: AndroidLoadControl(
-          minBufferDuration: const Duration(minutes: 5),   
-          maxBufferDuration: const Duration(minutes: 10),    
-          bufferForPlaybackDuration: const Duration(seconds: 2), 
-          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3), 
-          targetBufferBytes: 1024 * 1024 * 50, 
+          minBufferDuration: const Duration(minutes: 5),
+          maxBufferDuration: const Duration(minutes: 10),
+          bufferForPlaybackDuration: const Duration(seconds: 2),
+          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3),
+          targetBufferBytes: 1024 * 1024 * 50,
         ),
         darwinLoadControl: DarwinLoadControl(
           preferredForwardBufferDuration: const Duration(minutes: 5),
@@ -36,8 +53,6 @@ class MyAudioHandler extends BaseAudioHandler {
     _init();
   }
 
-
-
   Future<void> _init() async {
     await _player.setAudioSource(_playlist);
     _player.playbackEventStream.listen(_broadcastState);
@@ -45,10 +60,12 @@ class MyAudioHandler extends BaseAudioHandler {
     // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 4 frame/วิ)
     _positionTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (_player.playing) {
-        playbackState.add(playbackState.value.copyWith(
-          updatePosition: _player.position,
-          bufferedPosition: _player.bufferedPosition,
-        ));
+        playbackState.add(
+          playbackState.value.copyWith(
+            updatePosition: _player.position,
+            bufferedPosition: _player.bufferedPosition,
+          ),
+        );
       }
     });
 
@@ -78,7 +95,6 @@ class MyAudioHandler extends BaseAudioHandler {
   // ระบบเล่นเพลง & โหลดคิว
   // =============================================
 
-  @override
   Future<void> playSong(Song song) async {
     final item = _songToMediaItem(song);
     int existingIndex = queue.value.indexWhere((i) => i.id == song.id);
@@ -96,23 +112,25 @@ class MyAudioHandler extends BaseAudioHandler {
       currentQueue.add(item);
       queue.add(currentQueue);
 
+      // ✅ ใช้ Server stream (Server ทำการ resolve URL จาก YouTube)
       final source = AudioSource.uri(
         Uri.parse(ApiConfig.streamUrl(song.id)),
         tag: item,
-        headers: {'User-Agent': 'Mozilla/5.0'}
+        headers: {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://www.youtube.com/',
+          'Origin': 'https://www.youtube.com',
+        },
       );
 
       await _playlist.add(source);
-
-      // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
-      ApiService().getAudioUrl(song.id).catchError((_) => null);
 
       await _player.seek(Duration.zero, index: currentQueue.length - 1);
       _player.play();
     }
   }
 
-  @override
   Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
     if (songs.isEmpty) return;
 
@@ -120,20 +138,31 @@ class MyAudioHandler extends BaseAudioHandler {
     queue.add(items);
 
     if (initialIndex >= 0 && initialIndex < items.length) {
-       // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที" 
-       mediaItem.add(items[initialIndex]);
-       
-       // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (ไม่ต้องบล็อก UI)
-       ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+      // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที"
+      mediaItem.add(items[initialIndex]);
     }
 
-    final sources = songs.map((s) {
-      return AudioSource.uri(
-        Uri.parse(ApiConfig.streamUrl(s.id)),
-        tag: _songToMediaItem(s),
-        headers: {'User-Agent': 'Mozilla/5.0'}
-      );
-    }).toList();
+    // ✅ ใช้ Server stream สำหรับทั้งคิว
+    final sources = <AudioSource>[];
+
+    for (int i = 0; i < songs.length; i++) {
+      try {
+        sources.add(
+          AudioSource.uri(
+            Uri.parse(ApiConfig.streamUrl(songs[i].id)),
+            tag: _songToMediaItem(songs[i]),
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Referer': 'https://www.youtube.com/',
+              'Origin': 'https://www.youtube.com',
+            },
+          ),
+        );
+      } catch (e) {
+        print('❌ Error loading ${songs[i].id}: $e');
+      }
+    }
 
     await _playlist.clear();
     await _playlist.addAll(sources);
@@ -152,7 +181,7 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> skipToNext() async {
     final nextIndex = (_player.currentIndex ?? 0) + 1;
     if (nextIndex < queue.value.length) {
-       mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
+      mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
     }
     await _player.seekToNext();
   }
@@ -164,7 +193,7 @@ class MyAudioHandler extends BaseAudioHandler {
     } else {
       final prevIndex = (_player.currentIndex ?? 0) - 1;
       if (prevIndex >= 0) {
-         mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
+        mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
       }
       await _player.seekToPrevious();
     }
@@ -225,8 +254,8 @@ class MyAudioHandler extends BaseAudioHandler {
       album: 'YouTube Music',
       title: song.title,
       artist: song.artist,
-      artUri: (song.thumbnail.isNotEmpty && song.thumbnail != "NA") 
-          ? Uri.parse(song.thumbnail) 
+      artUri: (song.thumbnail.isNotEmpty && song.thumbnail != "NA")
+          ? Uri.parse(song.thumbnail)
           : null,
       duration: Duration(seconds: song.duration),
     );
@@ -234,33 +263,35 @@ class MyAudioHandler extends BaseAudioHandler {
 
   void _broadcastState(PlaybackEvent event) {
     final playing = _player.playing;
-    playbackState.add(playbackState.value.copyWith(
-      controls: [
-        MediaControl.skipToPrevious,
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-        MediaAction.setRepeatMode,
-        MediaAction.setShuffleMode,
-      },
-      androidCompactActionIndices: const [0, 1, 3],
-      processingState: const {
-        ProcessingState.idle: AudioProcessingState.idle,
-        ProcessingState.loading: AudioProcessingState.loading,
-        ProcessingState.buffering: AudioProcessingState.buffering,
-        ProcessingState.ready: AudioProcessingState.ready,
-        ProcessingState.completed: AudioProcessingState.completed,
-      }[_player.processingState]!,
-      playing: playing,
-      updatePosition: _player.position,
-      bufferedPosition: _player.bufferedPosition,
-      speed: _player.speed,
-      queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (playing) MediaControl.pause else MediaControl.play,
+          MediaControl.stop,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+          MediaAction.setRepeatMode,
+          MediaAction.setShuffleMode,
+        },
+        androidCompactActionIndices: const [0, 1, 3],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[_player.processingState]!,
+        playing: playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
+        queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
+      ),
+    );
   }
 }

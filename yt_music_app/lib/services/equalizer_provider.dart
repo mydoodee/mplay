@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:just_audio/just_audio.dart';
 import 'audio_handler.dart';
 
 class EqualizerProvider extends ChangeNotifier {
@@ -14,7 +13,14 @@ class EqualizerProvider extends ChangeNotifier {
   List<double> _bandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
   List<double> _customBandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
-  final List<String> presets = ['Normal', 'Pop', 'Classic', 'Jazz', 'Rock', 'Custom'];
+  final List<String> presets = [
+    'Normal',
+    'Pop',
+    'Classic',
+    'Jazz',
+    'Rock',
+    'Custom',
+  ];
   final List<String> bands = ['40', '150', '400', '1.2K', '3K', '5K', '12K'];
 
   bool get isEqualizerEnabled => _isEqualizerEnabled;
@@ -31,7 +37,7 @@ class EqualizerProvider extends ChangeNotifier {
     _isEqualizerEnabled = prefs.getBool('eq_enabled') ?? false;
     _selectedPreset = prefs.getString('eq_preset') ?? 'Normal';
     _bassBoosterLevel = prefs.getDouble('eq_bass_boost') ?? 0.0;
-    
+
     final savedBands = prefs.getString('eq_bands');
     if (savedBands != null) {
       final List<dynamic> decoded = jsonDecode(savedBands);
@@ -44,12 +50,14 @@ class EqualizerProvider extends ChangeNotifier {
     final savedCustom = prefs.getString('eq_custom_bands');
     if (savedCustom != null) {
       final List<dynamic> decodedCustom = jsonDecode(savedCustom);
-      final loadedCustom = decodedCustom.map((e) => (e as num).toDouble()).toList();
+      final loadedCustom = decodedCustom
+          .map((e) => (e as num).toDouble())
+          .toList();
       if (loadedCustom.length == 7) {
         _customBandValues = loadedCustom;
       }
     }
-    
+
     notifyListeners();
     _applyToAudioPlayer();
   }
@@ -113,9 +121,11 @@ class EqualizerProvider extends ChangeNotifier {
         // Bass Booster (AndroidLoudnessEnhancer) target gain in mB (millibels). Map 0-100% to 0-3000 mB (0 to +30dB approx)
         if (_bassBoosterLevel > 0) {
           await loudness.setEnabled(true);
-          await loudness.setTargetGain(_bassBoosterLevel / 100.0); // max 1.0 multiplier logic? Actually targetGain is in float usually, let's look at docs. just_audio loudnesEnhancer uses targetGain
+          await loudness.setTargetGain(
+            _bassBoosterLevel / 100.0,
+          ); // max 1.0 multiplier logic? Actually targetGain is in float usually, let's look at docs. just_audio loudnesEnhancer uses targetGain
           // Note: AndroidLoudnessEnhancer targetGain is a double multiplier usually or mB, the plugin takes a double.
-          await loudness.setTargetGain(_bassBoosterLevel / 100.0); 
+          await loudness.setTargetGain(_bassBoosterLevel / 100.0);
         } else {
           await loudness.setEnabled(false);
         }
@@ -124,10 +134,10 @@ class EqualizerProvider extends ChangeNotifier {
         final parameters = await eq.parameters;
         final bands = parameters.bands;
         for (int i = 0; i < min(bands.length, _bandValues.length); i++) {
-          // Map slider value (-15 to 15) to actual band gain 
+          // Map slider value (-15 to 15) to actual band gain
           // usually band gain limits are retrieved from parameters, but we scale it directly or just pass standard value
           // gain is usually a double between 0.0 and 1.0? No, just_audio usually takes gain in double.
-          await bands[i].setGain(_bandValues[i] / 15.0); 
+          await bands[i].setGain(_bandValues[i] / 15.0);
         }
       } else {
         await eq.setEnabled(false);

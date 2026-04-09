@@ -123,7 +123,7 @@ class PlayerScreen extends StatelessWidget {
                           child: CachedNetworkImage(
                             imageUrl: currentSong.hqThumbnailUrl,
                             fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(
+                            placeholder: (_, _) => Container(
                               color: const Color(0xFF1A1A1A),
                               child: const Center(
                                 child: CircularProgressIndicator(
@@ -132,7 +132,7 @@ class PlayerScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            errorWidget: (_, __, ___) => Container(
+                            errorWidget: (_, _, _) => Container(
                               color: const Color(0xFF1A1A1A),
                               child: const Icon(
                                 Icons.music_note_rounded,

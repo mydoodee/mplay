@@ -237,7 +237,9 @@ class SongTile extends StatelessWidget {
     final durationText = _formatDuration(song.duration);
 
     return Material(
-      color: isPlaying ? const Color(0xFFF15A24).withValues(alpha: 0.1) : Colors.transparent,
+      color: isPlaying
+          ? const Color(0xFFF15A24).withValues(alpha: 0.1)
+          : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         splashColor: const Color(0xFFF15A24).withValues(alpha: 0.06),
@@ -257,7 +259,7 @@ class SongTile extends StatelessWidget {
                       width: 120,
                       height: 68, // 16:9 ratio
                       fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
+                      placeholder: (_, _) => Container(
                         width: 120,
                         height: 68,
                         color: const Color(0xFF1E1E1E),
@@ -272,7 +274,7 @@ class SongTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                      errorWidget: (_, __, ___) => Container(
+                      errorWidget: (_, _, _) => Container(
                         width: 120,
                         height: 68,
                         color: const Color(0xFF1E1E1E),
@@ -358,7 +360,9 @@ class SongTile extends StatelessWidget {
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 13,
-                                    fontWeight: isPlaying ? FontWeight.w600 : FontWeight.w500,
+                                    fontWeight: isPlaying
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
                                     height: 1.35,
                                   ),
                                 ),

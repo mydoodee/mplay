@@ -9,12 +9,20 @@ class EqualizerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // If EqualizerProvider is null (e.g. audioHandler failed), show error
     final eqProvider = Provider.of<EqualizerProvider?>(context);
-    
+
     if (eqProvider == null) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.black, title: const Text('Equalizer')),
-        body: const Center(child: Text('Equalizer not available', style: TextStyle(color: Colors.white))),
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          title: const Text('Equalizer'),
+        ),
+        body: const Center(
+          child: Text(
+            'Equalizer not available',
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
       );
     }
 
@@ -44,14 +52,18 @@ class EqualizerScreen extends StatelessWidget {
               children: [
                 const Text(
                   'เปิดใช้งาน Equalizer',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 Switch(
                   value: eqProvider.isEqualizerEnabled,
                   onChanged: (val) {
                     eqProvider.setEnabled(val);
                   },
-                  activeColor: const Color(0xFFF15A24),
+                  activeThumbColor: const Color(0xFFF15A24),
                   inactiveThumbColor: const Color(0xFF777777),
                   inactiveTrackColor: const Color(0xFF333333),
                 ),
@@ -60,7 +72,7 @@ class EqualizerScreen extends StatelessWidget {
           ),
           const Divider(color: Color(0xFF222222), height: 1),
           const SizedBox(height: 24),
-          
+
           Expanded(
             child: Opacity(
               opacity: eqProvider.isEqualizerEnabled ? 1.0 : 0.4,
@@ -74,7 +86,8 @@ class EqualizerScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Row(
                         children: eqProvider.presets.map((preset) {
-                          final isSelected = preset == eqProvider.selectedPreset;
+                          final isSelected =
+                              preset == eqProvider.selectedPreset;
                           return Padding(
                             padding: const EdgeInsets.only(right: 12),
                             child: ChoiceChip(
@@ -87,15 +100,25 @@ class EqualizerScreen extends StatelessWidget {
                                 }
                               },
                               backgroundColor: const Color(0xFF1A1A1A),
-                              selectedColor: const Color(0xFFF15A24).withValues(alpha: 0.15),
+                              selectedColor: const Color(
+                                0xFFF15A24,
+                              ).withValues(alpha: 0.15),
                               labelStyle: TextStyle(
-                                color: isSelected ? const Color(0xFFF15A24) : const Color(0xFFAAAAAA),
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected
+                                    ? const Color(0xFFF15A24)
+                                    : const Color(0xFFAAAAAA),
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(20),
                                 side: BorderSide(
-                                  color: isSelected ? const Color(0xFFF15A24).withValues(alpha: 0.5) : const Color(0xFF333333),
+                                  color: isSelected
+                                      ? const Color(
+                                          0xFFF15A24,
+                                        ).withValues(alpha: 0.5)
+                                      : const Color(0xFF333333),
                                 ),
                               ),
                             ),
@@ -104,18 +127,20 @@ class EqualizerScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 48),
-                    
+
                     // Sliders
                     Expanded(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(eqProvider.bands.length, (index) {
+                        children: List.generate(eqProvider.bands.length, (
+                          index,
+                        ) {
                           return _buildSlider(context, eqProvider, index);
                         }),
                       ),
                     ),
                     const SizedBox(height: 32),
-                    
+
                     // Bass Booster
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -124,8 +149,22 @@ class EqualizerScreen extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Bass Booster', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                              Text('${eqProvider.bassBoosterLevel.round()}%', style: const TextStyle(color: Color(0xFFF15A24), fontSize: 16, fontWeight: FontWeight.w700)),
+                              const Text(
+                                'Bass Booster',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                '${eqProvider.bassBoosterLevel.round()}%',
+                                style: const TextStyle(
+                                  color: Color(0xFFF15A24),
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -134,9 +173,13 @@ class EqualizerScreen extends StatelessWidget {
                               activeTrackColor: const Color(0xFFF15A24),
                               inactiveTrackColor: const Color(0xFF2A2A2A),
                               thumbColor: Colors.white,
-                              overlayColor: const Color(0xFFF15A24).withValues(alpha: 0.2),
+                              overlayColor: const Color(
+                                0xFFF15A24,
+                              ).withValues(alpha: 0.2),
                               trackHeight: 6,
-                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 10,
+                              ),
                             ),
                             child: Slider(
                               value: eqProvider.bassBoosterLevel,
@@ -161,15 +204,19 @@ class EqualizerScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSlider(BuildContext context, EqualizerProvider eqProvider, int index) {
+  Widget _buildSlider(
+    BuildContext context,
+    EqualizerProvider eqProvider,
+    int index,
+  ) {
     final List<String> bandLabels = [
-      'Sub Bass', 
-      'Bass', 
-      'Low-Mid', 
-      'Midrange', 
-      'Upper-Mid', 
-      'Presence', 
-      'Brilliance'
+      'Sub Bass',
+      'Bass',
+      'Low-Mid',
+      'Midrange',
+      'Upper-Mid',
+      'Presence',
+      'Brilliance',
     ];
 
     return Column(
