@@ -137,27 +137,30 @@ class PlaylistUtils {
                                   ),
                                 ),
                                 onTap: () async {
+                                  Navigator.pop(ctx);
                                   await provider.addSongToPlaylist(
                                     playlist.id,
                                     song,
                                   );
-                                  Navigator.pop(ctx);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'เพิ่มลงใน "${playlist.name}" แล้ว',
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                  
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'เพิ่มลงใน "${playlist.name}" แล้ว',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        backgroundColor: const Color(0xFFF15A24),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
                                         ),
                                       ),
-                                      backgroundColor: const Color(0xFFF15A24),
-                                      duration: const Duration(seconds: 2),
-                                      behavior: SnackBarBehavior.floating,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                  );
+                                    );
+                                  }
                                 },
                               );
                             },
@@ -204,7 +207,7 @@ class PlaylistUtils {
           autofocus: true,
           textInputAction: TextInputAction.done,
           onSubmitted: (value) =>
-              _handleCreateSubmit(context, provider, controller, song),
+              _handleCreateSubmit(ctx, context, provider, controller, song),
         ),
         actions: [
           TextButton(
@@ -216,7 +219,7 @@ class PlaylistUtils {
           ),
           TextButton(
             onPressed: () =>
-                _handleCreateSubmit(context, provider, controller, song),
+                _handleCreateSubmit(ctx, context, provider, controller, song),
             child: const Text(
               'สร้าง',
               style: TextStyle(color: Color(0xFFF15A24)),
@@ -228,18 +231,19 @@ class PlaylistUtils {
   }
 
   static void _handleCreateSubmit(
-    BuildContext context,
+    BuildContext dialogContext,
+    BuildContext screenContext,
     SongProvider provider,
     TextEditingController controller,
     Song? song,
   ) async {
     final name = controller.text.trim();
     if (name.isNotEmpty) {
+      // Close dialog immediately to prevent lag or white screen redraws
+      if (dialogContext.mounted) Navigator.pop(dialogContext);
+      
       // 1. Create playlist
       await provider.createNewPlaylist(name);
-
-      // Close dialog
-      if (context.mounted) Navigator.pop(context);
 
       // 2. If song is provided, add it to the newly created playlist
       if (song != null) {
@@ -248,8 +252,8 @@ class PlaylistUtils {
           final newPlaylistId = provider.playlists.first.id;
           await provider.addSongToPlaylist(newPlaylistId, song);
 
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+          if (screenContext.mounted) {
+            ScaffoldMessenger.of(screenContext).showSnackBar(
               SnackBar(
                 content: Text(
                   'สร้างและเพิ่มลงใน "$name" แล้ว',

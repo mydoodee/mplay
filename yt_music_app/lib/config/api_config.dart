@@ -1,6 +1,6 @@
 class ApiConfig {
   // 🌐 Production Server
-  static const String _productionUrl = 'https://spicc.ac.th/api';
+  static const String _productionUrl = 'https://music.growkub.com/api';
 
   static String get baseUrl {
     return _productionUrl;
