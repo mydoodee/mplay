@@ -398,6 +398,86 @@ app.get('/api/health', async (req, res) => {
     });
   }
 });
+// ============================================
+// Active User Tracking (Heartbeat)
+// ============================================
+const activeUsers = new Map();
+const USER_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes without heartbeat = offline
+
+// Cleanup stale users periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [deviceId, data] of activeUsers.entries()) {
+    if (now - data.lastSeen > USER_TIMEOUT_MS) {
+      activeUsers.delete(deviceId);
+    }
+  }
+}, 60 * 1000);
+
+// POST /api/heartbeat
+// Body: { deviceId, deviceName, platform }
+app.post('/api/heartbeat', (req, res) => {
+  try {
+    const { deviceId, deviceName, platform } = req.body;
+    if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
+
+    const now = Date.now();
+    
+    if (activeUsers.has(deviceId)) {
+      const user = activeUsers.get(deviceId);
+      user.lastSeen = now;
+      user.deviceName = deviceName || user.deviceName;
+      user.platform = platform || user.platform;
+    } else {
+      activeUsers.set(deviceId, {
+        firstSeen: now,
+        lastSeen: now,
+        deviceName: deviceName || 'Unknown Device',
+        platform: platform || 'Unknown'
+      });
+      log.info(`👤 New user connected: ${deviceId} (${deviceName})`);
+    }
+
+    res.json({ success: true, activeUsersCount: activeUsers.size });
+  } catch (error) {
+    res.status(500).json({ error: 'Heartbeat failed' });
+  }
+});
+
+// POST /api/admin/users
+app.post('/api/admin/users', (req, res) => {
+  const { username, password } = req.body;
+  if (username !== 'admingrow' || password !== 'Kub@987*') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const now = Date.now();
+  const users = Array.from(activeUsers.entries()).map(([deviceId, data]) => {
+    const durationMs = now - data.firstSeen;
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+    const isOnline = (now - data.lastSeen) <= USER_TIMEOUT_MS;
+
+    return {
+      deviceId,
+      deviceName: data.deviceName,
+      platform: data.platform,
+      hoursUsed: hours,
+      minutesUsed: minutes,
+      isOnline,
+      lastSeenISO: new Date(data.lastSeen).toISOString(),
+    };
+  });
+
+  // Sort by lastSeen descending
+  users.sort((a, b) => new Date(b.lastSeenISO) - new Date(a.lastSeenISO));
+
+  res.json({
+    success: true,
+    totalOnline: users.filter(u => u.isOnline).length,
+    users
+  });
+});
 
 // ============================================
 // Start Server

@@ -12,6 +12,7 @@ import '../services/song_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/playlist_utils.dart';
 import 'equalizer_screen.dart';
+import 'admin_login_dialog.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -87,7 +88,15 @@ class _HomeScreenState extends State<HomeScreen> {
             surfaceTintColor: Colors.transparent,
             title: Row(
               children: [
-                const AppLogo(size: 26, showText: true), // Use AppLogo here
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const AdminLoginDialog(),
+                    );
+                  },
+                  child: const AppLogo(size: 26, showText: true),
+                ),
                 const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
