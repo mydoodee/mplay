@@ -110,7 +110,7 @@ async function resolveAudioUrl(videoId) {
 
   const args = [
     `https://www.youtube.com/watch?v=${videoId}`,
-    '-f', 'ba[ext=m4a][abr<=160]/ba[ext=m4a]/ba',
+    '-f', 'ba[ext=m4a]/ba/best',
     '-g',
     '--no-warnings',
     '--no-playlist',
@@ -144,7 +144,7 @@ app.get('/api/search', async (req, res) => {
     log.info(`🔍 Searching: "${query}" (limit: ${limit}, offset: ${offset})`);
 
     const isUrl = query.includes('youtube.com/') || query.includes('youtu.be/');
-    
+
     // หากเป็น URL ค้นหาตรงๆ ไม่ต้องใช้ Pagination
     // หากเป็นคำค้นหาทั่วไป ใช้ ytsearchN โดยที่ N คือจุดสิ้นสุดที่เราต้องการเข้าถึง
     const maxResults = offset + limit;
@@ -422,7 +422,7 @@ app.post('/api/heartbeat', (req, res) => {
     if (!deviceId) return res.status(400).json({ error: 'Missing deviceId' });
 
     const now = Date.now();
-    
+
     if (activeUsers.has(deviceId)) {
       const user = activeUsers.get(deviceId);
       user.lastSeen = now;
