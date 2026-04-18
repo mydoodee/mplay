@@ -49,7 +49,10 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => SongProvider()),
         if (audioHandler != null)
-          ChangeNotifierProvider(create: (_) => EqualizerProvider(audioHandler!)),
+          ChangeNotifierProvider(
+            create: (_) => EqualizerProvider(audioHandler!),
+            lazy: false, // บังคับให้สร้างและโหลดการตั้งค่าทันทีตอนเริ่มแอป
+          ),
       ],
       child: const MyApp(),
     ),

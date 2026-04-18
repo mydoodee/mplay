@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
 import 'playlist_screen.dart';
@@ -14,7 +16,6 @@ import '../utils/playlist_utils.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
 
-
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -27,17 +28,74 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
   int _selectedIndex = 0;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() {
+      _appVersion = 'v${info.version}+${info.buildNumber}';
+    });
+  }
+
+  Future<void> _showChangelog() async {
+    try {
+      final content = await rootBundle.loadString('assets/changelog.txt');
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A1A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            'ประวัติการอัปเดต',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Text(
+                content,
+                style: const TextStyle(
+                  color: Color(0xFFCCCCCC),
+                  fontSize: 13,
+                  height: 1.7,
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'ปิด',
+                style: TextStyle(color: Color(0xFFF15A24)),
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่สามารถโหลด Changelog ได้')),
+      );
+    }
   }
 
   void _onScroll() {
     // โหลดข้อมูลเพิ่มเฉพาะในหน้าค้นหา (index 0)
     if (_selectedIndex == 0) {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200) {
         final songProvider = Provider.of<SongProvider>(context, listen: false);
         if (songProvider.searchResults.isNotEmpty) {
           songProvider.searchMore();
@@ -62,7 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    // หน่วงเวลา 1 วินาทีหลังจากพิมพ์ตัวอักษรตัวสุดท้ายเสร็จ ถึงจะเริ่มค้นหา
+    _debounce = Timer(const Duration(milliseconds: 1000), () {
       if (query.isNotEmpty) {
         Provider.of<SongProvider>(context, listen: false).search(query);
       }
@@ -88,18 +147,82 @@ class _HomeScreenState extends State<HomeScreen> {
             surfaceTintColor: Colors.transparent,
             title: Row(
               children: [
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => const AdminLoginDialog(),
-                    );
+                PopupMenuButton<String>(
+                  offset: const Offset(0, 40),
+                  color: const Color(0xFF1E1E1E),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  icon: const AppLogo(size: 26, showText: true),
+                  onSelected: (value) {
+                    if (value == 'admin') {
+                      showDialog(
+                        context: context,
+                        builder: (context) => const AdminLoginDialog(),
+                      );
+                    } else if (value == 'changelog') {
+                      _showChangelog();
+                    }
                   },
-                  child: const AppLogo(size: 26, showText: true),
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'admin',
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.admin_panel_settings_rounded,
+                            color: Color(0xFFF15A24),
+                            size: 20,
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Admin Login',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'changelog',
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.history_edu_rounded,
+                            color: Color(0xFFF15A24),
+                            size: 20,
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Change Log',
+                            style: TextStyle(color: Colors.white, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        _appVersion.isNotEmpty
+                            ? ' $_appVersion'
+                            : 'Version ...',
+                        style: const TextStyle(
+                          color: Color(0xFF555555),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [Color(0xFFF15A24), Color(0xFFED1C24)],
@@ -120,11 +243,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.tune_rounded, color: Color(0xFF777777), size: 22),
+                icon: const Icon(
+                  Icons.tune_rounded,
+                  color: Color(0xFF777777),
+                  size: 22,
+                ),
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const EqualizerScreen()),
+                    MaterialPageRoute(
+                      builder: (context) => const EqualizerScreen(),
+                    ),
                   );
                 },
               ),
@@ -132,7 +261,10 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 8.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -141,19 +273,52 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF222222), width: 1),
+                        border: Border.all(
+                          color: const Color(0xFF222222),
+                          width: 1,
+                        ),
                       ),
                       child: TextField(
                         controller: _searchController,
                         onChanged: _onSearchChanged,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
-                          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 14),
-                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFF15A24), size: 22),
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF555555),
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            color: Color(0xFFF15A24),
+                            size: 22,
+                          ),
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _searchController,
+                            builder: (context, value, child) {
+                              return value.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(
+                                        Icons.clear_rounded,
+                                        color: Color(0xFF777777),
+                                        size: 20,
+                                      ),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _onSearchChanged('');
+                                      },
+                                    )
+                                  : const SizedBox.shrink();
+                            },
+                          ),
                           filled: true,
                           fillColor: const Color(0xFF111111),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
@@ -164,35 +329,45 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: Color(0xFFF15A24), width: 1),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFF15A24),
+                              width: 1,
+                            ),
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
                   ],
-                  if (_selectedIndex == 1) ...[
-                    _buildExploreTab(songProvider),
-                  ],
+                  if (_selectedIndex == 1) ...[_buildExploreTab(songProvider)],
                   if (_selectedIndex == 2) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
                           'คลังเพลงของคุณ',
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.add_rounded, color: Color(0xFFF15A24)),
-                          onPressed: () => PlaylistUtils.showCreatePlaylistDialog(context, songProvider),
+                          icon: const Icon(
+                            Icons.add_rounded,
+                            color: Color(0xFFF15A24),
+                          ),
+                          onPressed: () =>
+                              PlaylistUtils.showCreatePlaylistDialog(
+                                context,
+                                songProvider,
+                              ),
                         ),
-
                       ],
                     ),
                     const SizedBox(height: 16),
                     _buildPlaylistsGrid(songProvider),
                   ],
-
                 ],
               ),
             ),
@@ -203,14 +378,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircularProgressIndicator(color: Color(0xFFF15A24), strokeWidth: 2.5),
+                    CircularProgressIndicator(
+                      color: Color(0xFFF15A24),
+                      strokeWidth: 2.5,
+                    ),
                     SizedBox(height: 16),
-                    Text('กำลังค้นหา...', style: TextStyle(color: Color(0xFF777777), fontSize: 13)),
+                    Text(
+                      'กำลังค้นหา...',
+                      style: TextStyle(color: Color(0xFF777777), fontSize: 13),
+                    ),
                   ],
                 ),
               ),
             )
-          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isEmpty)
+          else if (_selectedIndex == 0 &&
+              results.isEmpty &&
+              songProvider.history.isEmpty)
             SliverFillRemaining(
               child: Center(
                 child: Column(
@@ -224,13 +407,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Color(0xFF0D0D0D),
                           shape: BoxShape.circle,
                         ),
-                        child: const AppLogo(size: 60, showText: false), // Show logo as an icon
+                        child: const AppLogo(
+                          size: 60,
+                          showText: false,
+                        ), // Show logo as an icon
                       ),
                     ),
                     const SizedBox(height: 20),
                     const Text(
                       'ค้นหาเพลงที่คุณชอบ',
-                      style: TextStyle(color: Color(0xFF666666), fontSize: 15, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Color(0xFF666666),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -241,62 +431,74 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
-          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isNotEmpty) ...[
+          else if (_selectedIndex == 0 &&
+              results.isEmpty &&
+              songProvider.history.isNotEmpty) ...[
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: Row(
                   children: [
-                    const Icon(Icons.history_rounded, color: Color(0xFFF15A24), size: 22),
+                    const Icon(
+                      Icons.history_rounded,
+                      color: Color(0xFFF15A24),
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
                     const Text(
                       'เล่นล่าสุด',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final song = songProvider.history[index];
-                  final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: SongTile(
-                      song: song,
-                      isPlaying: songProvider.currentSong?.id == song.id,
-                      isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
-                      onTap: () => songProvider.playSong(song, queue: songProvider.history, index: index),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final song = songProvider.history[index];
+                final isFavorite = songProvider.favorites.any(
+                  (s) => s.id == song.id,
+                );
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: SongTile(
+                    song: song,
+                    isPlaying: songProvider.currentSong?.id == song.id,
+                    isFavorite: isFavorite,
+                    onFavoritePressed: () => songProvider.toggleFavorite(song),
+                    onTap: () => songProvider.playSong(
+                      song,
+                      queue: songProvider.history,
+                      index: index,
                     ),
-                  );
-                },
-                childCount: songProvider.history.length,
-              ),
+                  ),
+                );
+              }, childCount: songProvider.history.length),
             ),
-          ]
-          else if (_selectedIndex == 0)
+          ] else if (_selectedIndex == 0)
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final list = results;
-                  final song = list[index];
-                  final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: SongTile(
-                      song: song,
-                      isPlaying: songProvider.currentSong?.id == song.id,
-                      isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
-                      onTap: () => songProvider.playSong(song, queue: list, index: index),
-                    ),
-                  );
-                },
-                childCount: results.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final list = results;
+                final song = list[index];
+                final isFavorite = songProvider.favorites.any(
+                  (s) => s.id == song.id,
+                );
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: SongTile(
+                    song: song,
+                    isPlaying: songProvider.currentSong?.id == song.id,
+                    isFavorite: isFavorite,
+                    onFavoritePressed: () => songProvider.toggleFavorite(song),
+                    onTap: () =>
+                        songProvider.playSong(song, queue: list, index: index),
+                  ),
+                );
+              }, childCount: results.length),
             ),
           if (_selectedIndex == 0 && songProvider.isFetchingMore)
             const SliverToBoxAdapter(
@@ -332,17 +534,24 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 color: const Color(0xFF1A1A1A),
-                image: results[0].thumbnail != "NA" && results[0].thumbnail.isNotEmpty
-                  ? DecorationImage(
-                      image: CachedNetworkImageProvider(results[0].thumbnail),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
+                image:
+                    results[0].thumbnail != "NA" &&
+                        results[0].thumbnail.isNotEmpty
+                    ? DecorationImage(
+                        image: CachedNetworkImageProvider(results[0].thumbnail),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 1),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
                 ],
               ),
-              child: (results[0].thumbnail == "NA" || results[0].thumbnail.isEmpty)
+              child:
+                  (results[0].thumbnail == "NA" || results[0].thumbnail.isEmpty)
                   ? const Center(child: AppLogo(size: 24, showText: false))
                   : null,
             ),
@@ -354,12 +563,20 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${results.length} เพลงในรายการ',
-                  style: const TextStyle(color: Color(0xFF888888), fontSize: 12, fontWeight: FontWeight.w400),
+                  style: const TextStyle(
+                    color: Color(0xFF888888),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ],
             ),
@@ -386,14 +603,27 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: ElevatedButton.icon(
                 onPressed: () => provider.playAll(songs),
-                icon: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 24),
-                label: const Text('เล่นทั้งหมด', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 14)),
+                icon: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.black,
+                  size: 24,
+                ),
+                label: const Text(
+                  'เล่นทั้งหมด',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -402,12 +632,25 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: OutlinedButton.icon(
               onPressed: () => provider.shuffleAll(songs),
-              icon: const Icon(Icons.shuffle_rounded, color: Color(0xFFCCCCCC), size: 20),
-              label: const Text('สุ่มเพลง', style: TextStyle(color: Color(0xFFCCCCCC), fontWeight: FontWeight.w600, fontSize: 14)),
+              icon: const Icon(
+                Icons.shuffle_rounded,
+                color: Color(0xFFCCCCCC),
+                size: 20,
+              ),
+              label: const Text(
+                'สุ่มเพลง',
+                style: TextStyle(
+                  color: Color(0xFFCCCCCC),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFF333333)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
           ),
@@ -425,16 +668,40 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.black,
         selectedItemColor: const Color(0xFFF15A24),
         unselectedItemColor: const Color(0xFF555555),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 11),
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w400,
+          fontSize: 11,
+        ),
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
         items: const [
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.home_filled, size: 22)), label: 'หน้าแรก'),
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.explore_outlined, size: 22)), label: 'สำรวจ'),
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.library_music_outlined, size: 22)), label: 'คลังเพลง'),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.home_filled, size: 22),
+            ),
+            label: 'หน้าแรก',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.explore_outlined, size: 22),
+            ),
+            label: 'สำรวจ',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.library_music_outlined, size: 22),
+            ),
+            label: 'คลังเพลง',
+          ),
         ],
       ),
     );
@@ -443,10 +710,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildPlaylistsGrid(SongProvider provider) {
     // 1st item = Favorites, rest = Custom Playlists
     final items = [
-      Playlist(id: -1, name: 'เพลงที่ชอบ', createdAt: '', songs: provider.favorites),
+      Playlist(
+        id: -1,
+        name: 'เพลงที่ชอบ',
+        createdAt: '',
+        songs: provider.favorites,
+      ),
       ...provider.playlists,
     ];
-
 
     return GridView.builder(
       shrinkWrap: true,
@@ -461,7 +732,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemBuilder: (context, index) {
         final playlist = items[index];
         final isFavorite = playlist.id == -1;
-        
+
         return GestureDetector(
           onTap: () {
             Navigator.push(
@@ -483,20 +754,36 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      color: isFavorite ? const Color(0xFFFF4466).withValues(alpha: 0.1) : const Color(0xFF252525),
-                      image: playlist.songs.isNotEmpty && playlist.songs[0].thumbnail != "NA" && playlist.songs[0].thumbnail.isNotEmpty
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
+                      ),
+                      color: isFavorite
+                          ? const Color(0xFFFF4466).withValues(alpha: 0.1)
+                          : const Color(0xFF252525),
+                      image:
+                          playlist.songs.isNotEmpty &&
+                              playlist.songs[0].thumbnail != "NA" &&
+                              playlist.songs[0].thumbnail.isNotEmpty
                           ? DecorationImage(
-                              image: CachedNetworkImageProvider(playlist.songs[0].thumbnail),
+                              image: CachedNetworkImageProvider(
+                                playlist.songs[0].thumbnail,
+                              ),
                               fit: BoxFit.cover,
                             )
                           : null,
                     ),
-                    child: (playlist.songs.isEmpty || playlist.songs[0].thumbnail == "NA" || playlist.songs[0].thumbnail.isEmpty)
+                    child:
+                        (playlist.songs.isEmpty ||
+                            playlist.songs[0].thumbnail == "NA" ||
+                            playlist.songs[0].thumbnail.isEmpty)
                         ? Center(
                             child: Icon(
-                              isFavorite ? Icons.favorite_rounded : Icons.queue_music_rounded,
-                              color: isFavorite ? const Color(0xFFFF4466) : const Color(0xFF777777),
+                              isFavorite
+                                  ? Icons.favorite_rounded
+                                  : Icons.queue_music_rounded,
+                              color: isFavorite
+                                  ? const Color(0xFFFF4466)
+                                  : const Color(0xFF777777),
                               size: 40,
                             ),
                           )
@@ -512,12 +799,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         playlist.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${playlist.songs.length} เพลง',
-                        style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+                        style: const TextStyle(
+                          color: Color(0xFF888888),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -526,11 +820,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
-
       },
     );
   }
-
 
   Widget _buildExploreTab(SongProvider songProvider) {
     // List of categories
@@ -598,7 +890,11 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const Text(
           'สำรวจ',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -636,30 +932,51 @@ class _HomeScreenState extends State<HomeScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  border: Border.all(color: colors[0].withValues(alpha: 0.4), width: 1),
+                  border: Border.all(
+                    color: colors[0].withValues(alpha: 0.4),
+                    width: 1,
+                  ),
                   boxShadow: [
-                    BoxShadow(color: colors[0].withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 0),
+                    BoxShadow(
+                      color: colors[0].withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      spreadRadius: 0,
+                    ),
                   ],
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(cat['icon'] as IconData, color: Colors.white, size: 28),
+                    Icon(
+                      cat['icon'] as IconData,
+                      color: Colors.white,
+                      size: 28,
+                    ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           cat['title'] as String,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
                         Text(
                           cat['subtitle'] as String,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontSize: 11,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),

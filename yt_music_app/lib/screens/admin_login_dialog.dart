@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'admin_dashboard_screen.dart';
 
 class AdminLoginDialog extends StatefulWidget {
@@ -13,6 +14,20 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMsg;
+  String _appVersion = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() {
+      _appVersion = 'v${info.version}+${info.buildNumber}';
+    });
+  }
 
   void _login() {
     setState(() {
@@ -29,10 +44,8 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AdminDashboardScreen(
-            username: user,
-            password: pass,
-          ),
+          builder: (context) =>
+              AdminDashboardScreen(username: user, password: pass),
         ),
       );
     } else {
@@ -92,13 +105,16 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
               _errorMsg!,
               style: const TextStyle(color: Colors.redAccent, fontSize: 14),
             ),
-          ]
+          ],
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('ยกเลิก', style: TextStyle(color: Color(0xFF777777))),
+          child: const Text(
+            'ยกเลิก',
+            style: TextStyle(color: Color(0xFF777777)),
+          ),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _login,
@@ -106,9 +122,16 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
             backgroundColor: const Color(0xFFF15A24),
             foregroundColor: Colors.white,
           ),
-          child: _isLoading 
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Text('เข้าสู่ระบบ'),
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('เข้าสู่ระบบ'),
         ),
       ],
     );
