@@ -57,7 +57,11 @@ class EqualizerScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 48), // Balance for back button
+                    Switch(
+                      value: eqProvider.isEqualizerEnabled,
+                      activeColor: const Color(0xFFF15A24),
+                      onChanged: eqProvider.setEnabled,
+                    ),
                   ],
                 ),
               ),
@@ -65,7 +69,11 @@ class EqualizerScreen extends StatelessWidget {
             const SizedBox(height: 24),
           
           Expanded(
-            child: Column(
+            child: IgnorePointer(
+              ignoring: !eqProvider.isEqualizerEnabled,
+              child: Opacity(
+                opacity: eqProvider.isEqualizerEnabled ? 1.0 : 0.4,
+                child: Column(
               children: [
                 // 🎨 Modern Presets Selector
                 SingleChildScrollView(
@@ -174,6 +182,8 @@ class EqualizerScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 40),
               ],
+            ),
+              ),
             ),
           ),
         ],

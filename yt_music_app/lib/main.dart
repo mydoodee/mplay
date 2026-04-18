@@ -6,6 +6,7 @@ import 'dart:io';
 import 'services/audio_handler.dart';
 import 'services/song_provider.dart';
 import 'services/equalizer_provider.dart';
+import 'services/heartbeat_service.dart';
 import 'screens/splash_screen.dart';
 
 // Global audio handler (nullable to prevent LateInitializationError)
@@ -40,12 +41,18 @@ Future<void> main() async {
     // App continues without audio service
   }
 
+  // Initialize HeartbeatService
+  HeartbeatService().init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SongProvider()),
         if (audioHandler != null)
-          ChangeNotifierProvider(create: (_) => EqualizerProvider(audioHandler!)),
+          ChangeNotifierProvider(
+            create: (_) => EqualizerProvider(audioHandler!),
+            lazy: false, // บังคับให้สร้างและโหลดการตั้งค่าทันทีตอนเริ่มแอป
+          ),
       ],
       child: const MyApp(),
     ),
