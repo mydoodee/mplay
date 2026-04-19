@@ -6,6 +6,7 @@ import '../services/song_provider.dart';
 import '../widgets/song_tile.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/app_logo.dart';
+import '../utils/responsive.dart';
 
 class PlaylistScreen extends StatelessWidget {
   final Playlist playlist;
@@ -46,117 +47,149 @@ class PlaylistScreen extends StatelessWidget {
                 ],
               ),
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: Responsive.contentMaxWidth(context),
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: Responsive.hPadding(context),
+                        vertical: 8.0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Hero(
-                            tag: 'playlist_art_${currentPlaylist.id}',
-                            child: Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                color: const Color(0xFF1A1A1A),
-                                image: songs.isNotEmpty && songs[0].thumbnail != "NA" && songs[0].thumbnail.isNotEmpty
-                                    ? DecorationImage(
-                                        image: CachedNetworkImageProvider(songs[0].thumbnail),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                                boxShadow: [
-                                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 2),
-                                ],
-                              ),
-                              child: (songs.isEmpty || songs[0].thumbnail == "NA" || songs[0].thumbnail.isEmpty)
-                                  ? const Center(child: AppLogo(size: 32, showText: false))
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  currentPlaylist.name,
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
+                          // Header
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Hero(
+                                tag: 'playlist_art_${currentPlaylist.id}',
+                                child: Container(
+                                  width: Responsive.isTablet(context) ? 140 : 80,
+                                  height: Responsive.isTablet(context) ? 140 : 80,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(16),
+                                    color: const Color(0xFF1A1A1A),
+                                    image: songs.isNotEmpty && songs[0].thumbnail != "NA" && songs[0].thumbnail.isNotEmpty
+                                        ? DecorationImage(
+                                            image: CachedNetworkImageProvider(songs[0].thumbnail),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                    boxShadow: [
+                                      BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 20, spreadRadius: 2),
+                                    ],
+                                  ),
+                                  child: (songs.isEmpty || songs[0].thumbnail == "NA" || songs[0].thumbnail.isEmpty)
+                                      ? Center(child: AppLogo(size: Responsive.isTablet(context) ? 56 : 32, showText: false))
+                                      : null,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${songs.length} เพลง',
-                                  style: const TextStyle(color: Color(0xFF888888), fontSize: 13, fontWeight: FontWeight.w400),
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      currentPlaylist.name,
+                                      style: TextStyle(
+                                        fontSize: Responsive.isTablet(context) ? 32 : 24,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      '${songs.length} เพลงในรายการ • สร้างเพื่อคุณ',
+                                      style: TextStyle(
+                                        color: const Color(0xFF888888), 
+                                        fontSize: Responsive.isTablet(context) ? 15 : 13, 
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // Action Buttons
+                          if (songs.isNotEmpty)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: Responsive.isTablet(context) ? 54 : 48,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFFF15A24), Color(0xFFED1C24)],
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFF15A24).withValues(alpha: 0.3),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ElevatedButton.icon(
+                                      onPressed: () => provider.playAll(songs),
+                                      icon: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 28),
+                                      label: const Text('เล่นทั้งหมด', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800, fontSize: 15)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.transparent,
+                                        shadowColor: Colors.transparent,
+                                        padding: const EdgeInsets.symmetric(vertical: 0),
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: SizedBox(
+                                    height: Responsive.isTablet(context) ? 54 : 48,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => provider.shuffleAll(songs),
+                                      icon: const Icon(Icons.shuffle_rounded, color: Color(0xFFCCCCCC), size: 22),
+                                      label: const Text('สุ่มเพลง', style: TextStyle(color: Color(0xFFCCCCCC), fontWeight: FontWeight.w700, fontSize: 15)),
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(color: Color(0xFF333333), width: 1.5),
+                                        padding: const EdgeInsets.symmetric(vertical: 0),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
+                          const SizedBox(height: 16),
+                          if (songs.isNotEmpty)
+                            Row(
+                              children: [
+                                Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFFF15A24), borderRadius: BorderRadius.circular(2))),
+                                const SizedBox(width: 8),
+                                const Text('เพลงทั้งหมด', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFCCCCCC))),
+                              ],
+                            ),
+                          if (songs.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 40),
+                              child: Center(
+                                child: Text('ยังไม่มีเพลงในเพลย์ลิสต์นี้', style: TextStyle(color: Color(0xFF777777), fontSize: 14)),
+                              ),
+                            ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-                      
-                      // Action Buttons
-                      if (songs.isNotEmpty)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFF15A24), Color(0xFFED1C24)],
-                                  ),
-                                ),
-                                child: ElevatedButton.icon(
-                                  onPressed: () => provider.playAll(songs),
-                                  icon: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 24),
-                                  label: const Text('เล่นทั้งหมด', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 14)),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    elevation: 0,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () => provider.shuffleAll(songs),
-                                icon: const Icon(Icons.shuffle_rounded, color: Color(0xFFCCCCCC), size: 20),
-                                label: const Text('สุ่มเพลง', style: TextStyle(color: Color(0xFFCCCCCC), fontWeight: FontWeight.w600, fontSize: 14)),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFF333333)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      const SizedBox(height: 16),
-                      if (songs.isNotEmpty)
-                        Row(
-                          children: [
-                            Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFFF15A24), borderRadius: BorderRadius.circular(2))),
-                            const SizedBox(width: 8),
-                            const Text('เพลงทั้งหมด', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFFCCCCCC))),
-                          ],
-                        ),
-                      if (songs.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 40),
-                          child: Center(
-                            child: Text('ยังไม่มีเพลงในเพลย์ลิสต์นี้', style: TextStyle(color: Color(0xFF777777), fontSize: 14)),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -168,29 +201,38 @@ class PlaylistScreen extends StatelessWidget {
                       final isFavorite = provider.favorites.any((s) => s.id == song.id);
                       final isCustomPlaylist = currentPlaylist.id != -1;
 
-                      return Dismissible(
-                        key: Key('playlist_${currentPlaylist.id}_song_${song.id}'),
-                        direction: isCustomPlaylist ? DismissDirection.endToStart : DismissDirection.none,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20.0),
-                          color: const Color(0xFFFF4466),
-                          child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
-                        ),
-                        onDismissed: (direction) {
-                          provider.removeSongFromPlaylist(currentPlaylist.id, song.id);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          child: SongTile(
-                            song: song,
-                            isPlaying: provider.currentSong?.id == song.id,
-                            isFavorite: isFavorite,
-                            onFavoritePressed: () => provider.toggleFavorite(song),
-                            onTap: () => provider.playSong(song, queue: songs, index: index),
-                            onRemoveFromPlaylist: isCustomPlaylist 
-                              ? () => provider.removeSongFromPlaylist(currentPlaylist.id, song.id) 
-                              : null,
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: Responsive.contentMaxWidth(context),
+                          ),
+                          child: Dismissible(
+                            key: Key('playlist_${currentPlaylist.id}_song_${song.id}'),
+                            direction: isCustomPlaylist ? DismissDirection.endToStart : DismissDirection.none,
+                            background: Container(
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20.0),
+                              color: const Color(0xFFFF4466),
+                              child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                            ),
+                            onDismissed: (direction) {
+                              provider.removeSongFromPlaylist(currentPlaylist.id, song.id);
+                            },
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: Responsive.hPadding(context),
+                              ),
+                              child: SongTile(
+                                song: song,
+                                isPlaying: provider.currentSong?.id == song.id,
+                                isFavorite: isFavorite,
+                                onFavoritePressed: () => provider.toggleFavorite(song),
+                                onTap: () => provider.playSong(song, queue: songs, index: index),
+                                onRemoveFromPlaylist: isCustomPlaylist 
+                                  ? () => provider.removeSongFromPlaylist(currentPlaylist.id, song.id) 
+                                  : null,
+                              ),
+                            ),
                           ),
                         ),
                       );
@@ -203,7 +245,6 @@ class PlaylistScreen extends StatelessWidget {
           );
         },
       ),
-      bottomSheet: const MiniPlayer(),
     );
   }
 
