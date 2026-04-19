@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.ytmusic.yt_music_app"
         minSdk = 24          // Android 7.0+ (รองรับ ~97% ของมือถือ, audio_service ทำงานดีสุด)
-        targetSdk = 34       // Android 14 (compatibility กว้าง)
+        targetSdk = 36       // Android 14 (compatibility กว้าง)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true  // รองรับ APK ขนาดใหญ่

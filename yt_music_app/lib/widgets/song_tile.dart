@@ -4,6 +4,7 @@ import '../models/song.dart';
 import '../widgets/app_logo.dart';
 import '../utils/playlist_utils.dart';
 import '../widgets/mini_equalizer.dart';
+import '../utils/responsive.dart';
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -235,15 +236,19 @@ class SongTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final durationText = _formatDuration(song.duration);
+    final thumbW = Responsive.thumbnailWidth(context);
+    final thumbH = Responsive.thumbnailHeight(context);
+    final titleSize = Responsive.songTitleFontSize(context);
+    final artistSize = Responsive.songArtistFontSize(context);
 
     return Material(
-      color: isPlaying ? const Color(0xFFF15A24).withValues(alpha: 0.1) : Colors.transparent,
+      color: isPlaying ? const Color(0xFF1A1A1A) : Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        splashColor: const Color(0xFFF15A24).withValues(alpha: 0.06),
-        highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.03),
+        splashColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
+        highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.05),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -254,12 +259,12 @@ class SongTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: CachedNetworkImage(
                       imageUrl: song.thumbnailUrl,
-                      width: 120,
-                      height: 68, // 16:9 ratio
+                      width: thumbW,
+                      height: thumbH,
                       fit: BoxFit.cover,
                       placeholder: (_, __) => Container(
-                        width: 120,
-                        height: 68,
+                        width: thumbW,
+                        height: thumbH,
                         color: const Color(0xFF1E1E1E),
                         child: const Center(
                           child: SizedBox(
@@ -273,8 +278,8 @@ class SongTile extends StatelessWidget {
                         ),
                       ),
                       errorWidget: (_, __, ___) => Container(
-                        width: 120,
-                        height: 68,
+                        width: thumbW,
+                        height: thumbH,
                         color: const Color(0xFF1E1E1E),
                         child: const Center(
                           child: AppLogo(size: 22, showText: false),
@@ -356,10 +361,10 @@ class SongTile extends StatelessWidget {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                    fontWeight: isPlaying ? FontWeight.w600 : FontWeight.w500,
-                                    height: 1.35,
+                                    color: isPlaying ? const Color(0xFFF15A24) : Colors.white,
+                                    fontSize: titleSize,
+                                    fontWeight: isPlaying ? FontWeight.w700 : FontWeight.w500,
+                                    height: 1.3,
                                   ),
                                 ),
                               ),
@@ -370,9 +375,9 @@ class SongTile extends StatelessWidget {
                             song.artist,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Color(0xFF888888),
-                              fontSize: 11.5,
+                            style: TextStyle(
+                              color: const Color(0xFF888888),
+                              fontSize: artistSize,
                               fontWeight: FontWeight.w400,
                             ),
                           ),
@@ -383,12 +388,12 @@ class SongTile extends StatelessWidget {
                     // ⋮ 3-dot menu button
                     GestureDetector(
                       onTap: () => _showSongMenu(context),
-                      child: const Padding(
-                        padding: EdgeInsets.only(left: 4, top: 0),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 4, top: 0),
                         child: Icon(
                           Icons.more_vert_rounded,
-                          color: Color(0xFF888888),
-                          size: 20,
+                          color: const Color(0xFF888888),
+                          size: Responsive.isTablet(context) ? 24 : 20,
                         ),
                       ),
                     ),

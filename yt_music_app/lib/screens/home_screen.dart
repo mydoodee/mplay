@@ -1,6 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
+import 'package:audio_service/audio_service.dart';
+import '../main.dart';
+import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
 import 'playlist_screen.dart';
@@ -11,8 +16,11 @@ import '../widgets/glowing_ring.dart';
 import '../services/song_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/playlist_utils.dart';
+import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
-
+import 'admin_login_dialog.dart';
+import '../widgets/mini_equalizer.dart';
+import 'player_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,17 +34,75 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
   int _selectedIndex = 0;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    setState(() {
+      _appVersion = 'v${info.version}+${info.buildNumber}';
+    });
+  }
+
+  Future<void> _showChangelog() async {
+    try {
+      final content = await rootBundle.loadString('assets/changelog.txt');
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder:
+            (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1A1A),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'ประวัติการอัปเดต',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Text(
+                    content,
+                    style: const TextStyle(
+                      color: Color(0xFFCCCCCC),
+                      fontSize: 13,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'ปิด',
+                    style: TextStyle(color: Color(0xFFF15A24)),
+                  ),
+                ),
+              ],
+            ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ไม่สามารถโหลด Changelog ได้')),
+      );
+    }
   }
 
   void _onScroll() {
     // โหลดข้อมูลเพิ่มเฉพาะในหน้าค้นหา (index 0)
     if (_selectedIndex == 0) {
-      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent - 200) {
         final songProvider = Provider.of<SongProvider>(context, listen: false);
         if (songProvider.searchResults.isNotEmpty) {
           songProvider.searchMore();
@@ -61,7 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    // หน่วงเวลา 1 วินาทีหลังจากพิมพ์ตัวอักษรตัวสุดท้ายเสร็จ ถึงจะเริ่มค้นหา
+    _debounce = Timer(const Duration(milliseconds: 1000), () {
       if (query.isNotEmpty) {
         Provider.of<SongProvider>(context, listen: false).search(query);
       }
@@ -71,224 +138,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final songProvider = Provider.of<SongProvider>(context);
-    final results = songProvider.searchResults;
+    return _buildPhoneLayout(songProvider);
+  }
 
+  // ──────────────────────────────────────────────
+  //  PHONE LAYOUT (original)
+  // ──────────────────────────────────────────────
+  Widget _buildPhoneLayout(SongProvider songProvider) {
+    final results = songProvider.searchResults;
     return Scaffold(
       backgroundColor: Colors.black,
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // 🎵 Premium App Bar
-          SliverAppBar(
-            expandedHeight: 0,
-            floating: true,
-            pinned: true,
-            backgroundColor: Colors.black,
-            surfaceTintColor: Colors.transparent,
-            title: Row(
-              children: [
-                const AppLogo(size: 26, showText: true), // Use AppLogo here
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFF15A24), Color(0xFFED1C24)],
-                    ),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'PRO',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.tune_rounded, color: Color(0xFF777777), size: 22),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const EqualizerScreen()),
-                  );
-                },
-              ),
-            ],
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_selectedIndex == 0) ...[
-                    // 🎵 Premium Search Bar
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF222222), width: 1),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: _onSearchChanged,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
-                          hintStyle: const TextStyle(color: Color(0xFF555555), fontSize: 14),
-                          prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFFF15A24), size: 22),
-                          filled: true,
-                          fillColor: const Color(0xFF111111),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: Color(0xFFF15A24), width: 1),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  if (_selectedIndex == 1) ...[
-                    _buildExploreTab(songProvider),
-                  ],
-                  if (_selectedIndex == 2) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'คลังเพลงของคุณ',
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add_rounded, color: Color(0xFFF15A24)),
-                          onPressed: () => PlaylistUtils.showCreatePlaylistDialog(context, songProvider),
-                        ),
-
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPlaylistsGrid(songProvider),
-                  ],
-
-                ],
-              ),
-            ),
-          ),
-          if (_selectedIndex == 0 && songProvider.isLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Color(0xFFF15A24), strokeWidth: 2.5),
-                    SizedBox(height: 16),
-                    Text('กำลังค้นหา...', style: TextStyle(color: Color(0xFF777777), fontSize: 13)),
-                  ],
-                ),
-              ),
-            )
-          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isEmpty)
-            SliverFillRemaining(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    GlowingRing(
-                      color: const Color(0xFFF15A24),
-                      child: Container(
-                        padding: const EdgeInsets.all(28),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF0D0D0D),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const AppLogo(size: 60, showText: false), // Show logo as an icon
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    const Text(
-                      'ค้นหาเพลงที่คุณชอบ',
-                      style: TextStyle(color: Color(0xFF666666), fontSize: 15, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'พิมพ์ชื่อเพลง ศิลปิน หรือวางลิงก์ YouTube',
-                      style: TextStyle(color: Color(0xFF444444), fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isNotEmpty) ...[
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.history_rounded, color: Color(0xFFF15A24), size: 22),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'เล่นล่าสุด',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final song = songProvider.history[index];
-                  final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: SongTile(
-                      song: song,
-                      isPlaying: songProvider.currentSong?.id == song.id,
-                      isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
-                      onTap: () => songProvider.playSong(song, queue: songProvider.history, index: index),
-                    ),
-                  );
-                },
-                childCount: songProvider.history.length,
-              ),
-            ),
-          ]
-          else if (_selectedIndex == 0)
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final list = results;
-                  final song = list[index];
-                  final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: SongTile(
-                      song: song,
-                      isPlaying: songProvider.currentSong?.id == song.id,
-                      isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
-                      onTap: () => songProvider.playSong(song, queue: list, index: index),
-                    ),
-                  );
-                },
-                childCount: results.length,
-              ),
-            ),
+          _buildSliverAppBar(),
+          _buildSliverContent(songProvider, results),
+          ..._buildSliverList(songProvider, results),
           if (_selectedIndex == 0 && songProvider.isFetchingMore)
             const SliverToBoxAdapter(
               child: Padding(
@@ -305,52 +170,222 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
-      bottomSheet: const MiniPlayer(),
     );
   }
 
-  Widget _buildPlaylistHeader(List<Song> results, String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+  // ──────────────────────────────────────────────
+  //  TABLET LAYOUT (NavigationRail + wide content)
+  // ──────────────────────────────────────────────
+  Widget _buildTabletLayout(SongProvider songProvider) {
+    final results = songProvider.searchResults;
+
+    // Nav destinations
+    const destinations = [
+      NavigationRailDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home_filled),
+        label: Text('หน้าแรก'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.explore_outlined),
+        selectedIcon: Icon(Icons.explore_rounded),
+        label: Text('สำรวจ'),
+      ),
+      NavigationRailDestination(
+        icon: Icon(Icons.library_music_outlined),
+        selectedIcon: Icon(Icons.library_music_rounded),
+        label: Text('คลังเพลง'),
+      ),
+    ];
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Row(
         children: [
-          Hero(
-            tag: 'playlist_art_$title',
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: const Color(0xFF1A1A1A),
-                image: results[0].thumbnail != "NA" && results[0].thumbnail.isNotEmpty
-                  ? DecorationImage(
-                      image: CachedNetworkImageProvider(results[0].thumbnail),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 1),
-                ],
+          // ── Navigation Rail ──
+          Container(
+            width: 88,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0D0D0D),
+              border: Border(
+                right: BorderSide(color: Color(0xFF1A1A1A), width: 1),
               ),
-              child: (results[0].thumbnail == "NA" || results[0].thumbnail.isEmpty)
-                  ? const Center(child: AppLogo(size: 24, showText: false))
-                  : null,
             ),
+            child: NavigationRail(
+              backgroundColor: Colors.transparent,
+              minWidth: 88,
+              selectedIndex: _selectedIndex,
+              onDestinationSelected: _onItemTapped,
+              labelType: NavigationRailLabelType.all,
+              useIndicator: true,
+              indicatorColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
+              indicatorShape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              destinations: destinations,
+              selectedIconTheme: const IconThemeData(
+                color: Color(0xFFF15A24),
+                size: 26,
+              ),
+              unselectedIconTheme: const IconThemeData(
+                color: Color(0xFF555555),
+                size: 24,
+              ),
+              selectedLabelTextStyle: const TextStyle(
+                color: Color(0xFFF15A24),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+              unselectedLabelTextStyle: const TextStyle(
+                color: Color(0xFF555555),
+                fontSize: 12,
+              ),
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    PopupMenuButton<String>(
+                      offset: const Offset(70, 0),
+                      color: const Color(0xFF1E1E1E),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF151515),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF222222), width: 0.5),
+                        ),
+                        child: const AppLogo(size: 32, showText: false),
+                      ),
+                      onSelected: (value) {
+                        if (value == 'admin') {
+                          showDialog(
+                            context: context,
+                            builder: (context) => const AdminLoginDialog(),
+                          );
+                        } else if (value == 'changelog') {
+                          _showChangelog();
+                        }
+                      },
+                      itemBuilder:
+                          (context) => [
+                            PopupMenuItem<String>(
+                              value: 'admin',
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    Icons.admin_panel_settings_rounded,
+                                    color: Color(0xFFF15A24),
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Admin Login',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'changelog',
+                              child: Row(
+                                children: const [
+                                  Icon(
+                                    Icons.history_edu_rounded,
+                                    color: Color(0xFFF15A24),
+                                    size: 20,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Change Log',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuDivider(height: 1),
+                            PopupMenuItem<String>(
+                              enabled: false,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              child: Text(
+                                _appVersion.isNotEmpty
+                                    ? ' $_appVersion'
+                                    : 'Version ...',
+                                style: const TextStyle(
+                                  color: Color(0xFF555555),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                    ),
+                  ],
+                ),
+              ),
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.tune_rounded,
+                        color: Color(0xFF777777),
+                        size: 24,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const EqualizerScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
           ),
-          const SizedBox(width: 12),
+
+          // ── Main Content Area ──
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${results.length} เพลงในรายการ',
-                  style: const TextStyle(color: Color(0xFF888888), fontSize: 12, fontWeight: FontWeight.w400),
+                Expanded(
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      _buildTabletSliverHeader(),
+                      _buildSliverContent(songProvider, results),
+                      ..._buildSliverList(songProvider, results),
+                      if (_selectedIndex == 0 && songProvider.isFetchingMore)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: Color(0xFFF15A24),
+                                strokeWidth: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 120)),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -360,52 +395,658 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildActionButtons(SongProvider provider, List<Song> songs) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
+  // ──────────────────────────────────────────────
+  //  SHARED SLIVER BUILDERS
+  // ──────────────────────────────────────────────
+
+  SliverAppBar _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 0,
+      floating: true,
+      pinned: true,
+      backgroundColor: Colors.black,
+      surfaceTintColor: Colors.transparent,
+      title: Row(
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFF15A24), Color(0xFFED1C24)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-              ),
-              child: ElevatedButton.icon(
-                onPressed: () => provider.playAll(songs),
-                icon: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 24),
-                label: const Text('เล่นทั้งหมด', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700, fontSize: 14)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
+          PopupMenuButton<String>(
+            offset: const Offset(0, 40),
+            color: const Color(0xFF1E1E1E),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => provider.shuffleAll(songs),
-              icon: const Icon(Icons.shuffle_rounded, color: Color(0xFFCCCCCC), size: 20),
-              label: const Text('สุ่มเพลง', style: TextStyle(color: Color(0xFFCCCCCC), fontWeight: FontWeight.w600, fontSize: 14)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Color(0xFF333333)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+            icon: const AppLogo(size: 26, showText: true),
+            onSelected: (value) {
+              if (value == 'admin') {
+                showDialog(
+                  context: context,
+                  builder: (context) => const AdminLoginDialog(),
+                );
+              } else if (value == 'changelog') {
+                _showChangelog();
+              }
+            },
+            itemBuilder:
+                (context) => [
+                  PopupMenuItem<String>(
+                    value: 'admin',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.admin_panel_settings_rounded,
+                          color: Color(0xFFF15A24),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Admin Login',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'changelog',
+                    child: Row(
+                      children: const [
+                        Icon(
+                          Icons.history_edu_rounded,
+                          color: Color(0xFFF15A24),
+                          size: 20,
+                        ),
+                        SizedBox(width: 12),
+                        Text(
+                          'Change Log',
+                          style: TextStyle(color: Colors.white, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    enabled: false,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      _appVersion.isNotEmpty ? ' $_appVersion' : 'Version ...',
+                      style: const TextStyle(
+                        color: Color(0xFF555555),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
           ),
         ],
       ),
+      actions: [
+        IconButton(
+          icon: const Icon(
+            Icons.tune_rounded,
+            color: Color(0xFF777777),
+            size: 22,
+          ),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const EqualizerScreen(),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
+
+  /// Tablet: simple pinned header with just a search bar (no logo — rail has it)
+  SliverAppBar _buildTabletSliverHeader() {
+    if (_selectedIndex != 0) {
+      return const SliverAppBar(
+        expandedHeight: 0,
+        floating: true,
+        pinned: false,
+        backgroundColor: Colors.black,
+        surfaceTintColor: Colors.transparent,
+        toolbarHeight: 0,
+      );
+    }
+    return SliverAppBar(
+      expandedHeight: 0,
+      floating: true,
+      pinned: true,
+      automaticallyImplyLeading: false,
+      backgroundColor: Colors.black,
+      surfaceTintColor: Colors.transparent,
+      title: _buildSearchBar(),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    final isTablet = Responsive.isTablet(context);
+    return Container(
+      height: isTablet ? 54 : 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
+        border: Border.all(color: const Color(0xFF222222), width: 1),
+        boxShadow: isTablet ? [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ] : null,
+      ),
+      child: Center(
+        child: TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          textAlignVertical: TextAlignVertical.center,
+          style: TextStyle(
+            color: Colors.white, 
+            fontSize: isTablet ? 15 : 14,
+            letterSpacing: 0.2,
+          ),
+          decoration: InputDecoration(
+            hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
+            isDense: true,
+            hintStyle: TextStyle(
+              color: const Color(0xFF555555), 
+              fontSize: isTablet ? 15 : 14,
+            ),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Icon(
+                Icons.search_rounded,
+                color: const Color(0xFFF15A24),
+                size: isTablet ? 26 : 22,
+              ),
+            ),
+            prefixIconConstraints: const BoxConstraints(minWidth: 40),
+            suffixIcon: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, child) {
+                return value.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(
+                          Icons.clear_rounded,
+                          color: Color(0xFF777777),
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onSearchChanged('');
+                        },
+                      )
+                    : const SizedBox.shrink();
+              },
+            ),
+            suffixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            filled: true,
+            fillColor: Colors.transparent,
+            contentPadding: EdgeInsets.zero,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
+              borderSide: const BorderSide(color: Color(0xFFF15A24), width: 1.5),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSliverContent(SongProvider songProvider, List<Song> results) {
+    final isTablet = Responsive.isTablet(context);
+    final hPad = Responsive.hPadding(context);
+
+    return SliverToBoxAdapter(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: Responsive.contentMaxWidth(context),
+          ),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_selectedIndex == 0) ...[
+                  // Always show inline search bar when index 0 (Home/Search)
+                  _buildSearchBar(),
+                  const SizedBox(height: 20),
+                ],
+                if (_selectedIndex == 1) ...[_buildExploreTab(songProvider)],
+                if (_selectedIndex == 2) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'คลังเพลงของคุณ',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.add_rounded,
+                          color: Color(0xFFF15A24),
+                        ),
+                        onPressed:
+                            () => PlaylistUtils.showCreatePlaylistDialog(
+                              context,
+                              songProvider,
+                            ),
+                      ),
+                    ],
+                  ),
+                  // Library tab: show playlist grid
+                  _buildPlaylistGrid(songProvider, results),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSliverList(SongProvider songProvider, List<Song> results) {
+    final hPad = Responsive.hPadding(context);
+    final maxW = Responsive.contentMaxWidth(context);
+    final currentSong = songProvider.currentSong;
+    List<Widget> slivers = [];
+
+    // Loading State
+    if (_selectedIndex == 0 && songProvider.isLoading) {
+      return [
+        const SliverFillRemaining(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  color: Color(0xFFF15A24),
+                  strokeWidth: 2.5,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'กำลังค้นหา...',
+                  style: TextStyle(color: Color(0xFF777777), fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // Empty Welcome State
+    if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isEmpty) {
+      return [
+        SliverFillRemaining(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GlowingRing(
+                  color: const Color(0xFFF15A24),
+                  child: Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0D0D0D),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const AppLogo(size: 60, showText: false),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'ค้นหาเพลงที่คุณชอบ',
+                  style: TextStyle(
+                    color: Color(0xFF666666),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'พิมพ์ชื่อเพลง ศิลปิน หรือวางลิงก์ YouTube',
+                  style: TextStyle(color: Color(0xFF444444), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    // 1. PINNED NOW PLAYING (Special Top Highlight)
+    if (_selectedIndex == 0 && currentSong != null) {
+      slivers.add(_buildActivePlayingItem(songProvider, currentSong));
+    }
+
+    // 2. RECENTLY PLAYED SECTION (if no search results)
+    if (_selectedIndex == 0 && results.isEmpty && songProvider.history.isNotEmpty) {
+      // Filter out the current song from history list if it's already shown at top
+      final filteredHistory = currentSong != null
+          ? songProvider.history.where((s) => s.id != currentSong.id).toList()
+          : songProvider.history;
+
+      if (filteredHistory.isNotEmpty) {
+        slivers.add(
+          SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxW),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.history_rounded, color: Color(0xFFF15A24), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'เล่นล่าสุด',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        slivers.add(
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final song = filteredHistory[index];
+                final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxW),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: hPad),
+                      child: SongTile(
+                        song: song,
+                        isPlaying: false,
+                        isFavorite: isFavorite,
+                        onFavoritePressed: () => songProvider.toggleFavorite(song),
+                        onTap: () => songProvider.playSong(song, queue: filteredHistory, index: index),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              childCount: filteredHistory.length,
+            ),
+          ),
+        );
+      }
+    }
+
+    // 3. SEARCH RESULTS SECTION
+    if (_selectedIndex == 0 && results.isNotEmpty) {
+      // Filter out current song from results if already shown at top
+      final filteredResults = currentSong != null
+          ? results.where((s) => s.id != currentSong.id).toList()
+          : results;
+
+      if (filteredResults.isNotEmpty) {
+        slivers.add(
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final song = filteredResults[index];
+                final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxW),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: hPad),
+                      child: SongTile(
+                        song: song,
+                        isPlaying: false,
+                        isFavorite: isFavorite,
+                        onFavoritePressed: () => songProvider.toggleFavorite(song),
+                        onTap: () => songProvider.playSong(song, queue: results, index: results.indexOf(song)),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              childCount: filteredResults.length,
+            ),
+          ),
+        );
+      }
+    }
+
+    return slivers;
+
+    return [];
+  }
+
+  Widget _buildActivePlayingItem(SongProvider provider, Song song) {
+    final hPad = Responsive.hPadding(context);
+    final maxW = Responsive.contentMaxWidth(context);
+    final isTablet = Responsive.isTablet(context);
+
+    return SliverToBoxAdapter(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxW),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    MiniEqualizer(color: Color(0xFFF15A24), size: 16),
+                    SizedBox(width: 10),
+                    Text(
+                      'กำลังเล่นอยู่',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: () {
+                    // Open full player (Full screen, no bottom sheet width limits)
+                    Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (context, animation, secondaryAnimation) =>
+                            PlayerScreen(),
+                        transitionsBuilder:
+                            (context, animation, secondaryAnimation, child) {
+                          return FadeTransition(opacity: animation, child: child);
+                        },
+                      ),
+                    );
+                  },
+                  child: Container(
+                    height: isTablet ? 140 : 110,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        width: 1,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      children: [
+                        // Background Blur Layer
+                        Positioned.fill(
+                          child: CachedNetworkImage(
+                            imageUrl: song.thumbnailUrl,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned.fill(
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.6),
+                                    const Color(0xFFF15A24).withValues(alpha: 0.2),
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Content Layer
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Hero(
+                                tag: 'playing_art',
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: AspectRatio(
+                                    aspectRatio: 16 / 9,
+                                    child: CachedNetworkImage(
+                                      imageUrl: song.thumbnailUrl,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      song.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: isTablet ? 20 : 17,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      song.artist,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.7),
+                                        fontSize: isTablet ? 15 : 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              StreamBuilder<PlaybackState>(
+                                stream: audioHandler?.playbackState,
+                                builder: (context, snapshot) {
+                                  final playbackState = snapshot.data;
+                                  final playing = playbackState?.playing ?? false;
+                                  final processingState =
+                                      playbackState?.processingState ?? AudioProcessingState.idle;
+
+                                  if (processingState == AudioProcessingState.loading ||
+                                      processingState == AudioProcessingState.buffering) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 16),
+                                      child: SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          color: Color(0xFFF15A24),
+                                        ),
+                                      ),
+                                    );
+                                  }
+
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isTablet)
+                                        IconButton(
+                                          icon: const Icon(Icons.skip_previous_rounded, color: Colors.white),
+                                          iconSize: 26,
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () => audioHandler?.skipToPrevious(),
+                                        ),
+                                      Container(
+                                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.15),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: IconButton(
+                                          icon: Icon(
+                                            playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                            color: Colors.white,
+                                          ),
+                                          iconSize: isTablet ? 32 : 28,
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () {
+                                            if (playing) {
+                                              audioHandler?.pause();
+                                            } else {
+                                              audioHandler?.play();
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.skip_next_rounded, color: Colors.white),
+                                        iconSize: 26,
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => audioHandler?.skipToNext(),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
 
   Widget _buildBottomNav() {
     return Container(
@@ -416,43 +1057,78 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.black,
         selectedItemColor: const Color(0xFFF15A24),
         unselectedItemColor: const Color(0xFF555555),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400, fontSize: 11),
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 11,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w400,
+          fontSize: 11,
+        ),
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
         items: const [
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.home_filled, size: 22)), label: 'หน้าแรก'),
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.explore_outlined, size: 22)), label: 'สำรวจ'),
-          BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.only(bottom: 4), child: Icon(Icons.library_music_outlined, size: 22)), label: 'คลังเพลง'),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.home_filled, size: 22),
+            ),
+            label: 'หน้าแรก',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.explore_outlined, size: 22),
+            ),
+            label: 'สำรวจ',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.library_music_outlined, size: 22),
+            ),
+            label: 'คลังเพลง',
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildPlaylistsGrid(SongProvider provider) {
-    // 1st item = Favorites, rest = Custom Playlists
+  Widget _buildPlaylistGrid(SongProvider provider, List<Song> results) {
+
     final items = [
-      Playlist(id: -1, name: 'เพลงที่ชอบ', createdAt: '', songs: provider.favorites),
+      Playlist(
+        id: -1,
+        name: 'เพลงที่ชอบ',
+        createdAt: DateTime.now().toIso8601String(),
+        songs: provider.favorites,
+      ),
       ...provider.playlists,
     ];
 
+    final isTablet = Responsive.isTablet(context);
+    final crossAxisCount = Responsive.gridCrossAxisCount(
+      context,
+      phone: 2,
+      tablet: 3,
+    );
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.85,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: isTablet ? 24 : 16,
+        mainAxisSpacing: isTablet ? 24 : 16,
+        childAspectRatio: isTablet ? 1.1 : 0.85,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final playlist = items[index];
         final isFavorite = playlist.id == -1;
-        
+
         return GestureDetector(
           onTap: () {
             Navigator.push(
@@ -471,27 +1147,44 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      color: isFavorite ? const Color(0xFFFF4466).withValues(alpha: 0.1) : const Color(0xFF252525),
-                      image: playlist.songs.isNotEmpty && playlist.songs[0].thumbnail != "NA" && playlist.songs[0].thumbnail.isNotEmpty
-                          ? DecorationImage(
-                              image: CachedNetworkImageProvider(playlist.songs[0].thumbnail),
-                              fit: BoxFit.cover,
-                            )
-                          : null,
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
                     ),
-                    child: (playlist.songs.isEmpty || playlist.songs[0].thumbnail == "NA" || playlist.songs[0].thumbnail.isEmpty)
-                        ? Center(
-                            child: Icon(
-                              isFavorite ? Icons.favorite_rounded : Icons.queue_music_rounded,
-                              color: isFavorite ? const Color(0xFFFF4466) : const Color(0xFF777777),
-                              size: 40,
+                    child: Container(
+                      color: isFavorite
+                          ? const Color(0xFFFF4466).withValues(alpha: 0.1)
+                          : const Color(0xFF252525),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (playlist.songs.isNotEmpty)
+                            CachedNetworkImage(
+                              imageUrl: playlist.songs[0].maxResThumbnailUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, error) => CachedNetworkImage(
+                                imageUrl: playlist.songs[0].hqThumbnailUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, url, err) => Container(color: Colors.transparent),
+                              ),
                             ),
-                          )
-                        : null,
+                          if (playlist.songs.isEmpty)
+                            Center(
+                              child: Icon(
+                                isFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.queue_music_rounded,
+                                color: isFavorite
+                                    ? const Color(0xFFFF4466)
+                                    : const Color(0xFF777777),
+                                size: 40,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 Padding(
@@ -503,12 +1196,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         playlist.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '${playlist.songs.length} เพลง',
-                        style: const TextStyle(color: Color(0xFF888888), fontSize: 12),
+                        style: const TextStyle(
+                          color: Color(0xFF888888),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -517,7 +1217,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
-
       },
     );
   }
@@ -529,67 +1228,86 @@ class _HomeScreenState extends State<HomeScreen> {
       {
         'title': 'เพลงฮิตมาแรง',
         'subtitle': 'อัปเดตเพลงฮิตที่สุด',
-        'query': 'Thailand Top 50 Official Playlist',
+        'query': 'เพลงใหม่มาแรง 2567',
         'icon': Icons.local_fire_department_rounded,
         'colors': [const Color(0xFFFF5722), const Color(0xFFFF9800)],
+        'image': 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500&q=80',
       },
       {
         'title': 'ชิลๆ ฟีลคาเฟ่',
         'subtitle': 'เพลงฟังสบายตอนทำงาน',
-        'query': 'เพลงฟังสบาย คาเฟ่ playlist',
+        'query': 'เพลงฟังสบาย คาเฟ่ 2024',
         'icon': Icons.coffee_rounded,
         'colors': [const Color(0xFF795548), const Color(0xFFA1887F)],
+        'image': 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=500&q=80',
       },
       {
         'title': 'ลูกทุ่งอินดี้',
         'subtitle': 'เพลงลูกทุ่งยอดฮิต 100 ล้านวิว',
-        'query': 'เพลงลูกทุ่งฮิต 100 ล้านวิว Playlist',
+        'query': 'เพลงลูกทุ่งฮิตใหม่ล่าสุด',
         'icon': Icons.mic_external_on_rounded,
         'colors': [const Color(0xFFE91E63), const Color(0xFFF06292)],
+        'image': 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80',
       },
       {
         'title': 'ป๊อปสากลคูลๆ',
         'subtitle': 'เพลงสากลฟังสบาย',
-        'query': 'Top pop hits playlist',
+        'query': 'เพลงสากลยอดฮิต 2024',
         'icon': Icons.public_rounded,
         'colors': [const Color(0xFF2196F3), const Color(0xFF64B5F6)],
+        'image': 'https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500&q=80',
       },
       {
         'title': 'ร็อกมันส์ๆ',
         'subtitle': 'จัดเต็มทุกจังหวะ',
-        'query': 'Thai Rock hits playlist',
+        'query': 'เพลงร็อกไทยยุค 90-ปัจจุบัน',
         'icon': Icons.electric_bolt_rounded,
         'colors': [const Color(0xFFF44336), const Color(0xFFEF5350)],
+        'image': 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=500&q=80',
       },
       {
         'title': 'เศร้าซึม',
         'subtitle': 'เพลงช้ากินใจ',
-        'query': 'เพลงเศร้า อกหัก Playlist',
+        'query': 'เพลงเศร้า อกหัก 2567',
         'icon': Icons.water_drop_rounded,
         'colors': [const Color(0xFF3F51B5), const Color(0xFF7986CB)],
+        'image': 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=500&q=80',
       },
       {
         'title': 'เพลงเต้นตื๊ดๆ',
         'subtitle': 'ปลุกพลังความสนุก',
-        'query': 'เพลงแดนซ์ สายย่อ Playlist EDM',
+        'query': 'เพลงแดนซ์ 2024 สายย่อ',
         'icon': Icons.speaker_group_rounded,
         'colors': [const Color(0xFF9C27B0), const Color(0xFFE040FB)],
+        'image': 'https://images.unsplash.com/photo-1525926472898-756184a56c36?w=500&q=80',
       },
       {
         'title': 'คอนเสิร์ตฮิต',
         'subtitle': 'การแสดงสดสุดมันส์',
-        'query': 'Live Concert Full Show',
+        'query': 'บันทึกการแสดงสด คอนเสิร์ต',
         'icon': Icons.stadium_rounded,
         'colors': [const Color(0xFF009688), const Color(0xFF4DB6AC)],
+        'image': 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500&q=80',
       },
     ];
+
+    final isTablet = Responsive.isTablet(context);
+    final crossAxisCount = Responsive.gridCrossAxisCount(
+      context,
+      phone: 2,
+      tablet: 4,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
           'สำรวจ',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white),
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
         ),
         const SizedBox(height: 8),
         const Text(
@@ -600,11 +1318,11 @@ class _HomeScreenState extends State<HomeScreen> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.4,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: isTablet ? 24 : 16,
+            mainAxisSpacing: isTablet ? 24 : 16,
+            childAspectRatio: isTablet ? 1.3 : 1.1,
           ),
           itemCount: categories.length,
           itemBuilder: (context, index) {
@@ -616,45 +1334,97 @@ class _HomeScreenState extends State<HomeScreen> {
                 _onItemTapped(0); // Switch to search tab
                 songProvider.search(_searchController.text);
               },
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: LinearGradient(
-                    colors: [
-                      colors[0].withValues(alpha: 0.8),
-                      colors[1].withValues(alpha: 0.3),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  border: Border.all(color: colors[0].withValues(alpha: 0.4), width: 1),
-                  boxShadow: [
-                    BoxShadow(color: colors[0].withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 0),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Stack(
                   children: [
-                    Icon(cat['icon'] as IconData, color: Colors.white, size: 28),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          cat['title'] as String,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                    // Background Image with Fallback Gradient
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              colors[0].withValues(alpha: 0.8),
+                              colors[1].withValues(alpha: 0.4),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          cat['subtitle'] as String,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: CachedNetworkImage(
+                          imageUrl: cat['image'] as String,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: Colors.white.withValues(alpha: 0.05),
+                          ),
+                          errorWidget: (context, url, error) => const SizedBox.shrink(),
                         ),
-                      ],
+                      ),
+                    ),
+                    // Dark Overlay
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.black.withValues(alpha: 0.6),
+                              Colors.black.withValues(alpha: 0.3),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Content
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(
+                            cat['icon'] as IconData,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                          Flexible(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  cat['title'] as String,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  cat['subtitle'] as String,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                    fontSize: 11,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

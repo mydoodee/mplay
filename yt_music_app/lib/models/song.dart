@@ -13,12 +13,22 @@ class Song {
     return 'https://i.ytimg.com/vi/$id/mqdefault.jpg';
   }
 
-  // High-quality thumbnail for player screen (hqdefault = 480×360, closer to square)
+  // High-quality thumbnail for player screen (hqdefault = 480×360)
   String get hqThumbnailUrl {
-    if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
+    if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http') && !thumbnail.contains('ytimg.com')) {
       return thumbnail;
     }
     return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
+  }
+
+  // Standard-definition thumbnail (640×480)
+  String get sdThumbnailUrl {
+    return 'https://i.ytimg.com/vi/$id/sddefault.jpg';
+  }
+
+  // Maximum resolution thumbnail (1280×720)
+  String get maxResThumbnailUrl {
+    return 'https://i.ytimg.com/vi/$id/maxresdefault.jpg';
   }
 
   Song({
