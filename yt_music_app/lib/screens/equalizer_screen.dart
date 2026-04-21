@@ -254,7 +254,7 @@ class EqualizerScreen extends StatelessWidget {
       'กลาง-ต่ำ',
       'กลาง',
       'กลาง-สูง',
-      'เสียงแหลม',
+      'แหลม',
       'ความใส',
     ];
 

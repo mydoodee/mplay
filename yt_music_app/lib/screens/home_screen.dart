@@ -2,8 +2,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
-import 'package:audio_service/audio_service.dart';
-import '../main.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
@@ -19,8 +17,6 @@ import '../utils/playlist_utils.dart';
 import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
-import '../widgets/mini_equalizer.dart';
-import 'player_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -46,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadVersion() async {
     final info = await PackageInfo.fromPlatform();
     setState(() {
-      _appVersion = 'v${info.version}+${info.buildNumber}';
+      _appVersion = '${info.version} ${info.buildNumber}';
     });
   }
 
@@ -534,8 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     song: song,
                     isPlaying: currentSong?.id == song.id,
                     isFavorite: isFavorite,
-                    onFavoritePressed: () =>
-                        songProvider.toggleFavorite(song),
+                    onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
                       song,
                       queue: songProvider.history,
@@ -568,8 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     song: song,
                     isPlaying: currentSong?.id == song.id,
                     isFavorite: isFavorite,
-                    onFavoritePressed: () =>
-                        songProvider.toggleFavorite(song),
+                    onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
                       song,
                       queue: results,
@@ -585,242 +579,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return slivers;
-  }
-
-  Widget _buildActivePlayingItem(SongProvider provider, Song song) {
-    final hPad = Responsive.hPadding(context);
-    final maxW = Responsive.contentMaxWidth(context);
-    final isTablet = Responsive.isTablet(context);
-
-    return SliverToBoxAdapter(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxW),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 8, hPad, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    MiniEqualizer(color: Color(0xFFF15A24), size: 16),
-                    SizedBox(width: 10),
-                    Text(
-                      'กำลังเล่นอยู่',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () {
-                    // Open full player (Full screen, no bottom sheet width limits)
-                    Navigator.push(
-                      context,
-                      PageRouteBuilder(
-                        pageBuilder: (context, animation, secondaryAnimation) =>
-                            PlayerScreen(),
-                        transitionsBuilder:
-                            (context, animation, secondaryAnimation, child) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: child,
-                              );
-                            },
-                      ),
-                    );
-                  },
-                  child: Container(
-                    height: isTablet ? 140 : 110,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        width: 1,
-                      ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Stack(
-                      children: [
-                        // Background Blur Layer
-                        Positioned.fill(
-                          child: CachedNetworkImage(
-                            imageUrl: song.thumbnailUrl,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.black.withValues(alpha: 0.6),
-                                    const Color(
-                                      0xFFF15A24,
-                                    ).withValues(alpha: 0.2),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Content Layer
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Hero(
-                                tag: 'playing_art',
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: AspectRatio(
-                                    aspectRatio: 16 / 9,
-                                    child: CachedNetworkImage(
-                                      imageUrl: song.thumbnailUrl,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      song.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: isTablet ? 20 : 17,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      song.artist,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.7,
-                                        ),
-                                        fontSize: isTablet ? 15 : 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              StreamBuilder<PlaybackState>(
-                                stream: audioHandler?.playbackState,
-                                builder: (context, snapshot) {
-                                  final playbackState = snapshot.data;
-                                  final playing =
-                                      playbackState?.playing ?? false;
-                                  final processingState =
-                                      playbackState?.processingState ??
-                                      AudioProcessingState.idle;
-
-                                  if (processingState ==
-                                          AudioProcessingState.loading ||
-                                      processingState ==
-                                          AudioProcessingState.buffering) {
-                                    return const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                      ),
-                                      child: SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: Color(0xFFF15A24),
-                                        ),
-                                      ),
-                                    );
-                                  }
-
-                                  return Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (isTablet)
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.skip_previous_rounded,
-                                            color: Colors.white,
-                                          ),
-                                          iconSize: 26,
-                                          visualDensity: VisualDensity.compact,
-                                          onPressed: () =>
-                                              audioHandler?.skipToPrevious(),
-                                        ),
-                                      Container(
-                                        margin: const EdgeInsets.symmetric(
-                                          horizontal: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.15,
-                                          ),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: IconButton(
-                                          icon: Icon(
-                                            playing
-                                                ? Icons.pause_rounded
-                                                : Icons.play_arrow_rounded,
-                                            color: Colors.white,
-                                          ),
-                                          iconSize: isTablet ? 32 : 28,
-                                          visualDensity: VisualDensity.compact,
-                                          onPressed: () {
-                                            if (playing) {
-                                              audioHandler?.pause();
-                                            } else {
-                                              audioHandler?.play();
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.skip_next_rounded,
-                                          color: Colors.white,
-                                        ),
-                                        iconSize: 26,
-                                        visualDensity: VisualDensity.compact,
-                                        onPressed: () =>
-                                            audioHandler?.skipToNext(),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 4),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildBottomNav() {
