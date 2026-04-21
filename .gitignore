@@ -12,6 +12,7 @@ yarn-error.log
 build/
 *.apk
 *.aab
+key.properties
 
 # IntelliJ / IDE
 .idea/

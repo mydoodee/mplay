@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import '../models/song.dart';
@@ -9,10 +10,10 @@ import '../main.dart'; // To access audioHandler
 class SongProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final DbHelper _dbHelper = DbHelper();
-  
+
   List<Song> _searchResults = [];
   List<Song> get searchResults => _searchResults;
-  
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -72,31 +73,37 @@ class SongProvider with ChangeNotifier {
     _hasMoreResults = true;
     _searchResults = [];
     notifyListeners();
-    
-    final results = await _apiService.searchSongs(query, limit: _pageSize, offset: 0);
+
+    final results = await _apiService.searchSongs(
+      query,
+      limit: _pageSize,
+      offset: 0,
+    );
     _searchResults = results;
-    
+
     if (results.length < _pageSize) {
       _hasMoreResults = false;
     }
-    
+
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> searchMore() async {
-    if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) return;
-    
+    if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) {
+      return;
+    }
+
     _isFetchingMore = true;
     notifyListeners();
-    
+
     final currentOffset = _searchResults.length;
     final moreResults = await _apiService.searchSongs(
-      _currentSearchQuery, 
-      limit: _pageSize, 
+      _currentSearchQuery,
+      limit: _pageSize,
       offset: currentOffset,
     );
-    
+
     if (moreResults.isEmpty) {
       _hasMoreResults = false;
     } else {
@@ -105,7 +112,7 @@ class SongProvider with ChangeNotifier {
         _hasMoreResults = false;
       }
     }
-    
+
     _isFetchingMore = false;
     notifyListeners();
   }
@@ -120,14 +127,16 @@ class SongProvider with ChangeNotifier {
       await _dbHelper.addToHistory(song);
       await _loadHistory(); // Refresh history
     } catch (e) {
-      print('DB/Audio Error in playSong: $e');
+      if (kDebugMode) {
+        print('DB/Audio Error in playSong: $e');
+      }
     }
   }
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
     for (var song in songs) {
-       await _dbHelper.addToHistory(song);
+      await _dbHelper.addToHistory(song);
     }
     await _loadHistory();
   }

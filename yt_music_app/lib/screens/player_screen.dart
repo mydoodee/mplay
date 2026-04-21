@@ -180,7 +180,7 @@ class PlayerScreen extends StatelessWidget {
                 _buildSeekBar(context),
                 const SizedBox(height: 16),
                 LayoutBuilder(
-                  builder: (context, constraints) => 
+                  builder: (context, constraints) =>
                       _buildControls(context, constraints.maxWidth),
                 ),
                 const SizedBox(height: 32),
@@ -242,7 +242,7 @@ class PlayerScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              placeholder: (_, __) => Container(
+              placeholder: (_, _) => Container(
                 color: const Color(0xFF1A1A1A),
                 child: const Center(
                   child: CircularProgressIndicator(
@@ -271,7 +271,9 @@ class PlayerScreen extends StatelessWidget {
         children: [
           Expanded(
             child: Column(
-              crossAxisAlignment: isTablet ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+              crossAxisAlignment: isTablet
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
               children: [
                 Text(
                   currentSong.title,
@@ -342,8 +344,7 @@ class PlayerScreen extends StatelessWidget {
                   activeTrackColor: const Color(0xFFF15A24),
                   inactiveTrackColor: const Color(0xFF2A2A2A),
                   thumbColor: Colors.white,
-                  overlayColor:
-                      const Color(0xFFF15A24).withValues(alpha: 0.15),
+                  overlayColor: const Color(0xFFF15A24).withValues(alpha: 0.15),
                   trackHeight: isTablet ? 4 : 3,
                   thumbShape: RoundSliderThumbShape(
                     enabledThumbRadius: isTablet ? 6 : 5,
@@ -353,16 +354,15 @@ class PlayerScreen extends StatelessWidget {
                   ),
                 ),
                 child: Slider(
-                  value: position.inMilliseconds
-                      .toDouble()
-                      .clamp(0, duration.inMilliseconds.toDouble()),
+                  value: position.inMilliseconds.toDouble().clamp(
+                    0,
+                    duration.inMilliseconds.toDouble(),
+                  ),
                   max: duration.inMilliseconds.toDouble() > 0
                       ? duration.inMilliseconds.toDouble()
                       : 1.0,
                   onChanged: (value) {
-                    audioHandler?.seek(
-                      Duration(milliseconds: value.round()),
-                    );
+                    audioHandler?.seek(Duration(milliseconds: value.round()));
                   },
                 ),
               ),
@@ -474,7 +474,8 @@ class PlayerScreen extends StatelessWidget {
                   ],
                 ),
                 child: Center(
-                  child: processingState == AudioProcessingState.loading ||
+                  child:
+                      processingState == AudioProcessingState.loading ||
                           processingState == AudioProcessingState.buffering
                       ? SizedBox(
                           width: playIconSize * 0.7,
@@ -576,11 +577,7 @@ class PlayerScreen extends StatelessWidget {
     );
   }
 
-  void _showPlayerMenu(
-    BuildContext context,
-    SongProvider provider,
-    Song song,
-  ) {
+  void _showPlayerMenu(BuildContext context, SongProvider provider, Song song) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -653,7 +650,8 @@ class PlayerScreen extends StatelessWidget {
           builder: (context, snapshot) {
             final queue = snapshot.data ?? [];
             return Container(
-              height: MediaQuery.of(context).size.height * (isTablet ? 0.85 : 0.75),
+              height:
+                  MediaQuery.of(context).size.height * (isTablet ? 0.85 : 0.75),
               decoration: const BoxDecoration(
                 color: Color(0xFF111111),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -670,8 +668,7 @@ class PlayerScreen extends StatelessWidget {
                     ),
                   ),
                   const Padding(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Row(
                       children: [
                         Icon(

@@ -8,8 +8,8 @@ class MusicVisualizer extends StatefulWidget {
   final int barCount;
 
   const MusicVisualizer({
-    super.key, 
-    required this.isPlaying, 
+    super.key,
+    required this.isPlaying,
     this.color = const Color(0xFFF15A24),
     this.barCount = 7,
     this.maxHeight = 60.0,
@@ -19,7 +19,8 @@ class MusicVisualizer extends StatefulWidget {
   State<MusicVisualizer> createState() => _MusicVisualizerState();
 }
 
-class _MusicVisualizerState extends State<MusicVisualizer> with TickerProviderStateMixin {
+class _MusicVisualizerState extends State<MusicVisualizer>
+    with TickerProviderStateMixin {
   late AnimationController _phaseController;
   late AnimationController _amplitudeController;
   late Animation<double> _amplitudeAnimation;
@@ -27,7 +28,7 @@ class _MusicVisualizerState extends State<MusicVisualizer> with TickerProviderSt
   @override
   void initState() {
     super.initState();
-    
+
     _phaseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4), // Slower for smoother movement
@@ -75,7 +76,10 @@ class _MusicVisualizerState extends State<MusicVisualizer> with TickerProviderSt
       animation: Listenable.merge([_phaseController, _amplitudeAnimation]),
       builder: (context, child) {
         return CustomPaint(
-          size: Size(MediaQuery.of(context).size.width * 0.75, widget.maxHeight),
+          size: Size(
+            MediaQuery.of(context).size.width * 0.75,
+            widget.maxHeight,
+          ),
           painter: MultiWavePainter(
             color: widget.color.withValues(alpha: widget.isPlaying ? 1.0 : 0.3),
             phase: _phaseController.value,
@@ -100,26 +104,51 @@ class MultiWavePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final halfHeight = size.height / 2;
-    final width = size.width;
-
     // Draw 3 layers of waves for depth and "music" feel
-    _drawWave(canvas, size, color.withValues(alpha: 0.15), 1.0, phase, 1.2, 0.4, 1.5); // Bottom faint
-    _drawWave(canvas, size, color.withValues(alpha: 0.4), 1.5, phase + 0.3, 2.2, 0.6, 2.0); // Middle
-    _drawWave(canvas, size, color, 3.0, phase - 0.2, 1.8, 0.8, 3.0, hasGlow: true); // Top Main
+    _drawWave(
+      canvas,
+      size,
+      color.withValues(alpha: 0.15),
+      1.0,
+      phase,
+      1.2,
+      0.4,
+      1.5,
+    ); // Bottom faint
+    _drawWave(
+      canvas,
+      size,
+      color.withValues(alpha: 0.4),
+      1.5,
+      phase + 0.3,
+      2.2,
+      0.6,
+      2.0,
+    ); // Middle
+    _drawWave(
+      canvas,
+      size,
+      color,
+      3.0,
+      phase - 0.2,
+      1.8,
+      0.8,
+      3.0,
+      hasGlow: true,
+    ); // Top Main
   }
 
   void _drawWave(
-    Canvas canvas, 
-    Size size, 
-    Color waveColor, 
-    double strokeWidth, 
-    double wavePhase, 
-    double frequency, 
+    Canvas canvas,
+    Size size,
+    Color waveColor,
+    double strokeWidth,
+    double wavePhase,
+    double frequency,
     double heightScale,
-    double glowSize,
-    {bool hasGlow = false}
-  ) {
+    double glowSize, {
+    bool hasGlow = false,
+  }) {
     final paint = Paint()
       ..color = waveColor
       ..style = PaintingStyle.stroke
@@ -134,33 +163,54 @@ class MultiWavePainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = strokeWidth + (i * 4)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, i * 4.0);
-        
-        canvas.drawPath(_createWavePath(size, wavePhase, frequency, heightScale), glowPaint);
+
+        canvas.drawPath(
+          _createWavePath(size, wavePhase, frequency, heightScale),
+          glowPaint,
+        );
       }
     }
 
-    canvas.drawPath(_createWavePath(size, wavePhase, frequency, heightScale), paint);
+    canvas.drawPath(
+      _createWavePath(size, wavePhase, frequency, heightScale),
+      paint,
+    );
   }
 
-  Path _createWavePath(Size size, double wavePhase, double frequency, double heightScale) {
+  Path _createWavePath(
+    Size size,
+    double wavePhase,
+    double frequency,
+    double heightScale,
+  ) {
     final path = Path();
     final halfHeight = size.height / 2;
     final width = size.width;
 
     for (double x = 0; x <= width; x += 1) {
       final normalizedX = x / width;
-      
+
       // Tapering factor (0 at ends, 1 at center)
       final taperFactor = math.pow(math.sin(normalizedX * math.pi), 1.5);
-      
+
       // Primary sine wave
-      final sineFactor = math.sin(normalizedX * 2 * math.pi * frequency - wavePhase * 2 * math.pi);
-      
+      final sineFactor = math.sin(
+        normalizedX * 2 * math.pi * frequency - wavePhase * 2 * math.pi,
+      );
+
       // Secondary harmonic to avoid "worm" look
-      final secondarySine = math.sin(normalizedX * 4 * math.pi * 1.5 + wavePhase * 3 * math.pi);
-      
-      final y = halfHeight + (sineFactor * 0.75 + secondarySine * 0.25) * (size.height * 0.4) * amplitude * heightScale * taperFactor;
-      
+      final secondarySine = math.sin(
+        normalizedX * 4 * math.pi * 1.5 + wavePhase * 3 * math.pi,
+      );
+
+      final y =
+          halfHeight +
+          (sineFactor * 0.75 + secondarySine * 0.25) *
+              (size.height * 0.4) *
+              amplitude *
+              heightScale *
+              taperFactor;
+
       if (x == 0) {
         path.moveTo(x, y);
       } else {

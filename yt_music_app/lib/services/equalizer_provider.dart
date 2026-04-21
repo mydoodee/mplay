@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:just_audio/just_audio.dart';
 import 'audio_handler.dart';
 
 class EqualizerProvider extends ChangeNotifier {
@@ -15,7 +14,14 @@ class EqualizerProvider extends ChangeNotifier {
   List<double> _bandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
   List<double> _customBandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
-  final List<String> presets = ['ปกติ', 'ป๊อป', 'คลาสสิก', 'แจ๊ส', 'ร็อก', 'กำหนดเอง'];
+  final List<String> presets = [
+    'ปกติ',
+    'ป๊อป',
+    'คลาสสิก',
+    'แจ๊ส',
+    'ร็อก',
+    'กำหนดเอง',
+  ];
   final List<String> bands = ['40', '150', '400', '1.2K', '3K', '5K', '12K'];
 
   bool get isEqualizerEnabled => _isEqualizerEnabled;
@@ -32,7 +38,7 @@ class EqualizerProvider extends ChangeNotifier {
     _isEqualizerEnabled = prefs.getBool('eq_enabled') ?? true;
     _selectedPreset = prefs.getString('eq_preset') ?? 'ปกติ';
     _bassBoosterLevel = prefs.getDouble('eq_bass_boost') ?? 0.0;
-    
+
     final savedBands = prefs.getString('eq_bands');
     if (savedBands != null) {
       final List<dynamic> decoded = jsonDecode(savedBands);
@@ -45,12 +51,14 @@ class EqualizerProvider extends ChangeNotifier {
     final savedCustom = prefs.getString('eq_custom_bands');
     if (savedCustom != null) {
       final List<dynamic> decodedCustom = jsonDecode(savedCustom);
-      final loadedCustom = decodedCustom.map((e) => (e as num).toDouble()).toList();
+      final loadedCustom = decodedCustom
+          .map((e) => (e as num).toDouble())
+          .toList();
       if (loadedCustom.length == 7) {
         _customBandValues = loadedCustom;
       }
     }
-    
+
     notifyListeners();
     _applyToAudioPlayer();
   }
@@ -114,7 +122,7 @@ class EqualizerProvider extends ChangeNotifier {
     try {
       if (_isEqualizerEnabled) {
         await eq.setEnabled(true);
-        
+
         // Bass Booster
         if (_bassBoosterLevel > 0) {
           try {
@@ -135,7 +143,7 @@ class EqualizerProvider extends ChangeNotifier {
             await bands[i].setGain(_bandValues[i] / 15.0);
           }
         } catch (e) {
-          // This catches the "Map<dynamic, dynamic> is not a subtype of Map<String, dynamic>" 
+          // This catches the "Map<dynamic, dynamic> is not a subtype of Map<String, dynamic>"
           // or other platform-specific implementation errors
           debugPrint("Equalizer parameters error: $e");
         }
