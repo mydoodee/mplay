@@ -1,3 +1,6 @@
+## Version 1.0.0 (Build 5)
+- เพิ่มการแสดงผลรองรับอุปกรณ์ Tablet
+
 ## Version 1.0.0 (Build 4)
 - เพิ่มระบบ Popup Menu ที่โลโก้แอป
 - เพิ่มปุ่มปิด-เปิด Equalizer ใน Equalizer Screen

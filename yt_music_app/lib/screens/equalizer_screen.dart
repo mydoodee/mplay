@@ -42,7 +42,10 @@ class EqualizerScreen extends StatelessWidget {
             children: [
               // ── AppBar ──
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 child: Row(
                   children: [
                     IconButton(
@@ -68,7 +71,7 @@ class EqualizerScreen extends StatelessWidget {
                     ),
                     Switch(
                       value: eqProvider.isEqualizerEnabled,
-                      activeColor: const Color(0xFFF15A24),
+                      activeThumbColor: const Color(0xFFF15A24),
                       onChanged: eqProvider.setEnabled,
                     ),
                   ],

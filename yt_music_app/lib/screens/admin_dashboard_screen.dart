@@ -30,7 +30,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.initState();
     _fetchUsers();
     // Refresh every 10 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchUsers());
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _fetchUsers(),
+    );
   }
 
   @override
@@ -42,14 +45,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _fetchUsers() async {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/admin/users');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': widget.username,
-          'password': widget.password,
-        }),
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .post(
+            url,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'username': widget.username,
+              'password': widget.password,
+            }),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -83,7 +88,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ผู้ใช้งานระบบ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text(
+          'ผู้ใช้งานระบบ',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
         centerTitle: false,
         actions: [
           Center(
@@ -119,10 +127,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
     if (_error != null && _users.isEmpty) {
       return Center(
-        child: Text(
-          _error!,
-          style: const TextStyle(color: Colors.redAccent),
-        ),
+        child: Text(_error!, style: const TextStyle(color: Colors.redAccent)),
       );
     }
     if (_users.isEmpty) {
@@ -144,13 +149,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         itemBuilder: (context, index) {
           final user = _users[index];
           final isOnline = user['isOnline'] == true;
-          
+
           return Card(
             color: const Color(0xFF1E1E1E),
             margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
               leading: Container(
                 width: 48,
                 height: 48,
@@ -158,16 +168,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   color: const Color(0xFF252525),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isOnline ? const Color(0xFF4CAF50).withOpacity(0.5) : Colors.transparent,
+                    // ignore: deprecated_member_use
+                    color: isOnline
+                        // ignore: deprecated_member_use
+                        ? const Color(0xFF4CAF50).withOpacity(0.5)
+                        : Colors.transparent,
                     width: 2,
                   ),
                 ),
                 child: Center(
                   child: Icon(
-                    user['platform'] == 'android' ? Icons.android_rounded 
-                    : user['platform'] == 'ios' ? Icons.phone_iphone_rounded
-                    : Icons.devices_rounded,
-                    color: isOnline ? const Color(0xFF4CAF50) : const Color(0xFF777777),
+                    user['platform'] == 'android'
+                        ? Icons.android_rounded
+                        : user['platform'] == 'ios'
+                        ? Icons.phone_iphone_rounded
+                        : Icons.devices_rounded,
+                    color: isOnline
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFF777777),
                   ),
                 ),
               ),
@@ -176,38 +194,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   Expanded(
                     child: Text(
                       user['deviceName'] ?? 'Unknown User',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: isOnline ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFF777777).withOpacity(0.1),
+                      color: isOnline
+                          // ignore: deprecated_member_use
+                          ? const Color(0xFF4CAF50).withOpacity(0.1)
+                          // ignore: deprecated_member_use
+                          : const Color(0xFF777777).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       isOnline ? 'Online' : 'Offline',
                       style: TextStyle(
-                        color: isOnline ? const Color(0xFF4CAF50) : const Color(0xFF777777),
+                        color: isOnline
+                            ? const Color(0xFF4CAF50)
+                            : const Color(0xFF777777),
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Row(
                   children: [
-                    const Icon(Icons.timer_outlined, size: 14, color: Color(0xFFBBBBBB)),
+                    const Icon(
+                      Icons.timer_outlined,
+                      size: 14,
+                      color: Color(0xFFBBBBBB),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'ใช้งานแล้ว: ${_formatUsageTime(user['hoursUsed'] ?? 0, user['minutesUsed'] ?? 0)}',
-                      style: const TextStyle(color: Color(0xFFBBBBBB), fontSize: 12),
+                      style: const TextStyle(
+                        color: Color(0xFFBBBBBB),
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),

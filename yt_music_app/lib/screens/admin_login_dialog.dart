@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'admin_dashboard_screen.dart';
 
 class AdminLoginDialog extends StatefulWidget {
@@ -14,19 +13,10 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _errorMsg;
-  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
-    _loadAppVersion();
-  }
-
-  Future<void> _loadAppVersion() async {
-    final info = await PackageInfo.fromPlatform();
-    setState(() {
-      _appVersion = 'v${info.version}+${info.buildNumber}';
-    });
   }
 
   void _login() {
