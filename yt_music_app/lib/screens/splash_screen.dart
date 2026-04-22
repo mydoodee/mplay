@@ -183,35 +183,20 @@ class _SplashScreenState extends State<SplashScreen>
                     opacity: _logoOpacity,
                     child: Column(
                       children: [
-                        // Glow ring around logo
+                        // Glow behind logo
                         Container(
-                          width: 100,
-                          height: 100,
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
                                   0xFFF15A24,
-                                ).withValues(alpha: 0.35),
-                                blurRadius: 40,
-                                spreadRadius: 8,
+                                ).withValues(alpha: 0.25),
+                                blurRadius: 60,
+                                spreadRadius: 10,
                               ),
                             ],
                           ),
-                          child: const AppLogo(size: 90, showText: false),
-                        ),
-                        const SizedBox(height: 20),
-                        // App name with letter spacing
-                        const Text(
-                          'M-PLAY',
-                          style: TextStyle(
-                            fontSize: 42,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white,
-                            letterSpacing: 6,
-                            height: 1.0,
-                          ),
+                          child: const AppLogo(size: 80, showText: true),
                         ),
                       ],
                     ),
