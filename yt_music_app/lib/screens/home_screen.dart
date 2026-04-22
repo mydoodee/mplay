@@ -479,6 +479,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
     }
 
+    // ACTIVE PLAYING SONG SECTION
+    if (_selectedIndex == 0 && currentSong != null) {
+      slivers.add(_buildActivePlayingItem(songProvider, currentSong));
+    }
+
     // 1. RECENTLY PLAYED SECTION (if no search results)
     if (_selectedIndex == 0 &&
         results.isEmpty &&
@@ -518,6 +523,8 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
             final song = songProvider.history[index];
+            if (currentSong?.id == song.id) return const SizedBox.shrink();
+            
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
@@ -551,6 +558,8 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
             final song = results[index];
+            if (currentSong?.id == song.id) return const SizedBox.shrink();
+            
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
@@ -654,7 +663,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisCount: crossAxisCount,
         crossAxisSpacing: isTablet ? 24 : 16,
         mainAxisSpacing: isTablet ? 24 : 16,
-        childAspectRatio: isTablet ? 1.1 : 0.85,
+        childAspectRatio: isTablet ? 1.35 : 0.85,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
