@@ -12,8 +12,7 @@ class Responsive {
       MediaQuery.of(context).size.shortestSide >= 600;
 
   /// ความกว้างสูงสุดของ content กลางหน้าจอ
-  static double contentMaxWidth(BuildContext context) =>
-      isTablet(context) ? 860.0 : double.infinity;
+  static double contentMaxWidth(BuildContext context) => double.infinity;
 
   /// Horizontal padding สำหรับ list / content
   static double hPadding(BuildContext context) =>
