@@ -18,6 +18,7 @@ class AppLogo extends StatelessWidget {
       'assets/images/logo.png',
       height: showText ? size * 1.4 : size,
       fit: BoxFit.contain,
+      color: color, // Optional: if you want to tint the logo
     );
   }
 }

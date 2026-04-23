@@ -17,6 +17,9 @@ import '../utils/playlist_utils.dart';
 import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
+import '../widgets/voice_search_button.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,12 +34,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _debounce;
   int _selectedIndex = 0;
   String _appVersion = '';
+  String _listeningText = ''; // real-time text จาก voice search
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadVersion();
+    _checkForUpdates();
+  }
+
+  Future<void> _checkForUpdates() async {
+    final updateInfo = await UpdateService.checkForUpdate();
+    if (updateInfo != null && mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => UpdateDialog(updateInfo: updateInfo),
+      );
+    }
   }
 
   Future<void> _loadVersion() async {
@@ -270,85 +286,143 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSearchBar() {
     final isTablet = Responsive.isTablet(context);
-    return Container(
-      height: isTablet ? 54 : 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
-        border: Border.all(color: const Color(0xFF222222), width: 1),
-        boxShadow: isTablet
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ]
-            : null,
-      ),
-      child: Center(
-        child: TextField(
-          controller: _searchController,
-          onChanged: _onSearchChanged,
-          textAlignVertical: TextAlignVertical.center,
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: isTablet ? 15 : 14,
-            letterSpacing: 0.2,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: isTablet ? 54 : 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFF111111),
+            borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
+            border: Border.all(color: const Color(0xFF222222), width: 1),
+            boxShadow: isTablet
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                  ]
+                : null,
           ),
-          decoration: InputDecoration(
-            hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
-            isDense: true,
-            hintStyle: TextStyle(
-              color: const Color(0xFF555555),
-              fontSize: isTablet ? 15 : 14,
-            ),
-            prefixIcon: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Icon(
-                Icons.search_rounded,
-                color: const Color(0xFFF15A24),
-                size: isTablet ? 26 : 22,
+          child: Center(
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              textAlignVertical: TextAlignVertical.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isTablet ? 15 : 14,
+                letterSpacing: 0.2,
               ),
-            ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 40),
-            suffixIcon: ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _searchController,
-              builder: (context, value, child) {
-                return value.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.clear_rounded,
-                          color: Color(0xFF777777),
-                          size: 20,
-                        ),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearchChanged('');
+              decoration: InputDecoration(
+                hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
+                isDense: true,
+                hintStyle: TextStyle(
+                  color: const Color(0xFF555555),
+                  fontSize: isTablet ? 15 : 14,
+                ),
+                prefixIcon: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Icon(
+                    Icons.search_rounded,
+                    color: const Color(0xFFF15A24),
+                    size: isTablet ? 26 : 22,
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 40),
+                // suffix: clear button + mic button
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _searchController,
+                      builder: (context, value, child) {
+                        return value.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.clear_rounded,
+                                  color: Color(0xFF777777),
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _onSearchChanged('');
+                                  setState(() => _listeningText = '');
+                                },
+                              )
+                            : const SizedBox.shrink();
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: VoiceSearchButton(
+                        onListenStart: () {
+                          setState(() => _listeningText = '');
                         },
-                      )
-                    : const SizedBox.shrink();
-              },
-            ),
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 40,
-            ),
-            filled: true,
-            fillColor: Colors.transparent,
-            contentPadding: EdgeInsets.zero,
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
-              borderSide: const BorderSide(
-                color: Color(0xFFF15A24),
-                width: 1.5,
+                        onResult: (text) {
+                          setState(() {
+                            _listeningText = '';
+                            _searchController.text = text;
+                          });
+                          _onSearchChanged(text);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                suffixIconConstraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+                filled: true,
+                fillColor: Colors.transparent,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(isTablet ? 16 : 14),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFF15A24),
+                    width: 1.5,
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
+        // Real-time voice text hint
+        if (_listeningText.isNotEmpty) ...
+          [
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A0D00),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFFF15A24).withValues(alpha: 0.35),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.mic_rounded,
+                      color: Color(0xFFF15A24), size: 14),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _listeningText,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+      ],
     );
   }
 
@@ -588,6 +662,44 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return slivers;
+  }
+
+  Widget _buildActivePlayingItem(SongProvider songProvider, Song song) {
+    final hPad = Responsive.hPadding(context);
+    final maxW = Responsive.contentMaxWidth(context);
+    final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
+
+    return SliverToBoxAdapter(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxW),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A0D00),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(0xFFF15A24).withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              child: SongTile(
+                song: song,
+                isPlaying: true,
+                isFavorite: isFavorite,
+                onFavoritePressed: () => songProvider.toggleFavorite(song),
+                onTap: () => songProvider.playSong(
+                  song,
+                  queue: songProvider.history,
+                  index: songProvider.history.indexWhere((s) => s.id == song.id),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildBottomNav() {
