@@ -4,12 +4,14 @@ import 'package:audio_service/audio_service.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
 import 'api_service.dart';
+import 'local_music_service.dart';
 import '../database/db_helper.dart';
 import '../main.dart'; // To access audioHandler
 
 class SongProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final DbHelper _dbHelper = DbHelper();
+  final LocalMusicService _localMusicService = LocalMusicService();
 
   List<Song> _searchResults = [];
   List<Song> get searchResults => _searchResults;
@@ -37,6 +39,16 @@ class SongProvider with ChangeNotifier {
 
   List<Song> _history = [];
   List<Song> get history => _history;
+
+  // Local Music State
+  final List<Song> _localSongs = [];
+  List<Song> get localSongs => _localSongs;
+
+  bool _isScanning = false;
+  bool get isScanning => _isScanning;
+
+  final List<String> _addedFolders = [];
+  List<String> get addedFolders => _addedFolders;
 
   SongProvider() {
     // Initialize lazily or after the first frame
@@ -204,5 +216,70 @@ class SongProvider with ChangeNotifier {
   Future<void> removeSongFromPlaylist(int playlistId, String videoId) async {
     await _dbHelper.removeSongFromPlaylist(playlistId, videoId);
     await _loadPlaylists();
+  }
+
+  // ─── Local Music ───
+
+  /// เพิ่มโฟลเดอร์เพลงจากเครื่อง / USB Drive
+  Future<void> addLocalFolder() async {
+    _isScanning = true;
+    notifyListeners();
+
+    try {
+      final songs = await _localMusicService.pickFolderAndScan();
+      if (songs.isNotEmpty) {
+        // ลบเพลงซ้ำ (เช็คจาก filePath)
+        for (final song in songs) {
+          final exists = _localSongs.any((s) => s.filePath == song.filePath);
+          if (!exists) {
+            _localSongs.add(song);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding local folder: $e');
+      }
+    }
+
+    _isScanning = false;
+    notifyListeners();
+  }
+
+  /// เพิ่มไฟล์เพลงจากเครื่อง
+  Future<void> addLocalFiles() async {
+    _isScanning = true;
+    notifyListeners();
+
+    try {
+      final songs = await _localMusicService.pickFiles();
+      if (songs.isNotEmpty) {
+        for (final song in songs) {
+          final exists = _localSongs.any((s) => s.filePath == song.filePath);
+          if (!exists) {
+            _localSongs.add(song);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding local files: $e');
+      }
+    }
+
+    _isScanning = false;
+    notifyListeners();
+  }
+
+  /// ลบเพลง local ออกจากรายการ
+  void removeLocalSong(Song song) {
+    _localSongs.removeWhere((s) => s.filePath == song.filePath);
+    notifyListeners();
+  }
+
+  /// ลบเพลง local ทั้งหมด
+  void clearLocalSongs() {
+    _localSongs.clear();
+    notifyListeners();
   }
 }

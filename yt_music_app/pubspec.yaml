@@ -2,7 +2,7 @@ name: yt_music_app
 description: "Mplay music in you hands"
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.0+6
+version: 1.0.0+8
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -34,7 +34,7 @@ dependencies:
   google_fonts: ^6.2.1
   intl: ^0.18.1
   shared_preferences: ^2.5.5
-  package_info_plus: ^10.0.0
+  package_info_plus: ^9.0.1
 
   # Voice Search
   speech_to_text: ^7.0.0
@@ -44,6 +44,10 @@ dependencies:
   path_provider: ^2.1.2
   open_filex: ^4.3.4
   permission_handler: ^11.3.0
+
+  # Local Music
+  audiotags: ^1.4.0
+  file_picker: ^11.0.0
 
 dev_dependencies:
   flutter_test:

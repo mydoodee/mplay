@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
@@ -392,36 +391,37 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         // Real-time voice text hint
-        if (_listeningText.isNotEmpty) ...
-          [
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A0D00),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFFF15A24).withValues(alpha: 0.35),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.mic_rounded,
-                      color: Color(0xFFF15A24), size: 14),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _listeningText,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+        if (_listeningText.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A0D00),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: const Color(0xFFF15A24).withValues(alpha: 0.35),
               ),
             ),
-          ],
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.mic_rounded,
+                  color: Color(0xFFF15A24),
+                  size: 14,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _listeningText,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -446,7 +446,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 20),
                 ],
                 if (_selectedIndex == 1) ...[_buildExploreTab(songProvider)],
-                if (_selectedIndex == 2) ...[
+                if (_selectedIndex == 2) ...[_buildLocalMusicTab(songProvider)],
+                if (_selectedIndex == 3) ...[
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -553,10 +554,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
     }
 
-    // ACTIVE PLAYING SONG SECTION
-    if (_selectedIndex == 0 && currentSong != null) {
-      slivers.add(_buildActivePlayingItem(songProvider, currentSong));
-    }
+    // ACTIVE PLAYING SONG SECTION - ลบออกเพื่อให้แสดงในตำแหน่งเดิมของ list
+    // if (_selectedIndex == 0 && currentSong != null) {
+    //   slivers.add(_buildActivePlayingItem(songProvider, currentSong));
+    // }
 
     // 1. RECENTLY PLAYED SECTION (if no search results)
     if (_selectedIndex == 0 &&
@@ -597,11 +598,20 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
             final song = songProvider.history[index];
-            if (currentSong?.id == song.id) return const SizedBox.shrink();
-            
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
+            final isCurrent = currentSong?.id == song.id;
+
+            if (isCurrent) {
+              return _buildActivePlayingCard(
+                songProvider,
+                song,
+                queue: songProvider.history,
+                index: index,
+              );
+            }
+
             return Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxW),
@@ -609,7 +619,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   child: SongTile(
                     song: song,
-                    isPlaying: currentSong?.id == song.id,
+                    isPlaying: false,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
@@ -632,11 +642,20 @@ class _HomeScreenState extends State<HomeScreen> {
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
             final song = results[index];
-            if (currentSong?.id == song.id) return const SizedBox.shrink();
-            
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
+            final isCurrent = currentSong?.id == song.id;
+
+            if (isCurrent) {
+              return _buildActivePlayingCard(
+                songProvider,
+                song,
+                queue: results,
+                index: index,
+              );
+            }
+
             return Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxW),
@@ -644,7 +663,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   child: SongTile(
                     song: song,
-                    isPlaying: currentSong?.id == song.id,
+                    isPlaying: false,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
@@ -664,37 +683,37 @@ class _HomeScreenState extends State<HomeScreen> {
     return slivers;
   }
 
-  Widget _buildActivePlayingItem(SongProvider songProvider, Song song) {
+  Widget _buildActivePlayingCard(
+    SongProvider songProvider,
+    Song song, {
+    required List<Song> queue,
+    required int index,
+  }) {
     final hPad = Responsive.hPadding(context);
     final maxW = Responsive.contentMaxWidth(context);
     final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
 
-    return SliverToBoxAdapter(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxW),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A0D00),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: const Color(0xFFF15A24).withValues(alpha: 0.4),
-                  width: 1,
-                ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxW),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A0D00),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: const Color(0xFFF15A24).withValues(alpha: 0.4),
+                width: 1,
               ),
-              child: SongTile(
-                song: song,
-                isPlaying: true,
-                isFavorite: isFavorite,
-                onFavoritePressed: () => songProvider.toggleFavorite(song),
-                onTap: () => songProvider.playSong(
-                  song,
-                  queue: songProvider.history,
-                  index: songProvider.history.indexWhere((s) => s.id == song.id),
-                ),
-              ),
+            ),
+            child: SongTile(
+              song: song,
+              isPlaying: true,
+              isFavorite: isFavorite,
+              onFavoritePressed: () => songProvider.toggleFavorite(song),
+              onTap: () =>
+                  songProvider.playSong(song, queue: queue, index: index),
             ),
           ),
         ),
@@ -737,6 +756,13 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Icon(Icons.explore_outlined, size: 22),
             ),
             label: 'สำรวจ',
+          ),
+          BottomNavigationBarItem(
+            icon: Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Icon(Icons.folder_rounded, size: 22),
+            ),
+            label: 'ไฟล์เพลง',
           ),
           BottomNavigationBarItem(
             icon: Padding(
@@ -873,6 +899,282 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLocalMusicTab(SongProvider songProvider) {
+    final localSongs = songProvider.localSongs;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ไฟล์เพลง',
+          style: TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'เพิ่มเพลงจากเครื่องหรือ USB Drive ของคุณ',
+          style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+        ),
+        const SizedBox(height: 20),
+
+        // ปุ่มเพิ่มโฟลเดอร์ / เพิ่มไฟล์
+        Row(
+          children: [
+            Expanded(
+              child: _buildLocalActionButton(
+                icon: Icons.create_new_folder_rounded,
+                label: 'เพิ่มโฟลเดอร์',
+                onTap: () => songProvider.addLocalFolder(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildLocalActionButton(
+                icon: Icons.audio_file_rounded,
+                label: 'เพิ่มไฟล์เพลง',
+                onTap: () => songProvider.addLocalFiles(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // สถานะกำลังสแกน
+        if (songProvider.isScanning) ...[
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Column(
+                children: [
+                  CircularProgressIndicator(
+                    color: Color(0xFFF15A24),
+                    strokeWidth: 2.5,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'กำลังอ่านไฟล์เพลง...',
+                    style: TextStyle(color: Color(0xFF777777), fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        // แสดงจำนวนเพลงที่เจอ + ปุ่มเล่นทั้งหมด/สุ่มเล่น
+        if (localSongs.isNotEmpty && !songProvider.isScanning) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141414),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF222222)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.music_note_rounded,
+                  color: Color(0xFFF15A24),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${localSongs.length} เพลง',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                // ปุ่มเล่นทั้งหมด
+                GestureDetector(
+                  onTap: () => songProvider.playAll(localSongs),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF15A24),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'เล่นทั้งหมด',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // ปุ่มสุ่มเล่น
+                GestureDetector(
+                  onTap: () => songProvider.shuffleAll(localSongs),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF333333)),
+                    ),
+                    child: const Icon(
+                      Icons.shuffle_rounded,
+                      color: Color(0xFFBBBBBB),
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // รายการเพลง
+        if (localSongs.isNotEmpty && !songProvider.isScanning)
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: localSongs.length,
+            itemBuilder: (context, index) {
+              final song = localSongs[index];
+              final currentSong = songProvider.currentSong;
+              final isFavorite = songProvider.favorites.any(
+                (s) => s.id == song.id,
+              );
+              final isCurrent = currentSong?.id == song.id;
+
+              return Dismissible(
+                key: Key(song.filePath ?? song.id),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  color: const Color(0xFFFF4466).withValues(alpha: 0.2),
+                  child: const Icon(
+                    Icons.delete_rounded,
+                    color: Color(0xFFFF4466),
+                  ),
+                ),
+                onDismissed: (_) => songProvider.removeLocalSong(song),
+                child: isCurrent
+                    ? _buildActivePlayingCard(
+                        songProvider,
+                        song,
+                        queue: localSongs,
+                        index: index,
+                      )
+                    : SongTile(
+                        song: song,
+                        isPlaying: false,
+                        isFavorite: isFavorite,
+                        onFavoritePressed: () =>
+                            songProvider.toggleFavorite(song),
+                        onTap: () => songProvider.playSong(
+                          song,
+                          queue: localSongs,
+                          index: index,
+                        ),
+                      ),
+              );
+            },
+          ),
+
+        // Empty state
+        if (localSongs.isEmpty && !songProvider.isScanning)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 60),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141414),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF222222),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.folder_open_rounded,
+                      color: Color(0xFF555555),
+                      size: 48,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'ยังไม่มีเพลงในเครื่อง',
+                    style: TextStyle(
+                      color: Color(0xFF666666),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'กดปุ่มด้านบนเพื่อเพิ่มโฟลเดอร์หรือไฟล์เพลง',
+                    style: TextStyle(color: Color(0xFF444444), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLocalActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141414),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF222222)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: const Color(0xFFF15A24), size: 22),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

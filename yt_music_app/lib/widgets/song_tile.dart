@@ -255,35 +255,55 @@ class SongTile extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: CachedNetworkImage(
-                    imageUrl: song.thumbnailUrl,
-                    width: thumbW,
-                    height: thumbH,
-                    fit: BoxFit.cover,
-                    placeholder: (_, _) => Container(
-                      width: thumbW,
-                      height: thumbH,
-                      color: const Color(0xFF1E1E1E),
-                      child: const Center(
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: Color(0xFFF15A24),
+                  child: song.isLocal
+                      ? (song.coverArtBytes != null
+                          ? Image.memory(
+                              song.coverArtBytes!,
+                              width: thumbW,
+                              height: thumbH,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              width: thumbW,
+                              height: thumbH,
+                              color: const Color(0xFF1E1E1E),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.music_note_rounded,
+                                  color: Color(0xFFF15A24),
+                                  size: 28,
+                                ),
+                              ),
+                            ))
+                      : CachedNetworkImage(
+                          imageUrl: song.thumbnailUrl,
+                          width: thumbW,
+                          height: thumbH,
+                          fit: BoxFit.cover,
+                          placeholder: (_, _) => Container(
+                            width: thumbW,
+                            height: thumbH,
+                            color: const Color(0xFF1E1E1E),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: Color(0xFFF15A24),
+                                ),
+                              ),
+                            ),
+                          ),
+                          errorWidget: (_, _, _) => Container(
+                            width: thumbW,
+                            height: thumbH,
+                            color: const Color(0xFF1E1E1E),
+                            child: const Center(
+                              child: AppLogo(size: 22, showText: false),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    errorWidget: (_, _, _) => Container(
-                      width: thumbW,
-                      height: thumbH,
-                      color: const Color(0xFF1E1E1E),
-                      child: const Center(
-                        child: AppLogo(size: 22, showText: false),
-                      ),
-                    ),
-                  ),
                 ),
                 // ⏱ Duration badge (bottom-right)
                 Positioned(

@@ -69,6 +69,8 @@ class MyAudioHandler extends BaseAudioHandler {
       int nextIndex = currentIndex + offset;
       if (nextIndex < queue.value.length) {
         final songId = queue.value[nextIndex].id;
+        // ข้ามเพลง local — ไม่ต้อง pre-cache
+        if (songId.startsWith('local_')) continue;
         try {
           await ApiService().getAudioUrl(songId);
         } catch (_) {}
@@ -97,17 +99,22 @@ class MyAudioHandler extends BaseAudioHandler {
       currentQueue.add(item);
       queue.add(currentQueue);
 
-      final source = AudioSource.uri(
-        Uri.parse(ApiConfig.streamUrl(song.id)),
-        tag: item,
-        headers: {'User-Agent': 'Mozilla/5.0'},
-      );
+      final AudioSource source;
+      if (song.isLocal && song.filePath != null) {
+        // 🎵 เล่นไฟล์จากเครื่อง
+        source = AudioSource.file(song.filePath!, tag: item);
+      } else {
+        // 🌐 เล่นจาก YouTube stream
+        source = AudioSource.uri(
+          Uri.parse(ApiConfig.streamUrl(song.id)),
+          tag: item,
+          headers: {'User-Agent': 'Mozilla/5.0'},
+        );
+        // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
+        ApiService().getAudioUrl(song.id).catchError((_) => null);
+      }
 
       await _playlist.add(source);
-
-      // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
-      ApiService().getAudioUrl(song.id).catchError((_) => null);
-
       await _player.seek(Duration.zero, index: currentQueue.length - 1);
       _player.play();
     }
@@ -123,16 +130,24 @@ class MyAudioHandler extends BaseAudioHandler {
       // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที"
       mediaItem.add(items[initialIndex]);
 
-      // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (ไม่ต้องบล็อก UI)
-      ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+      // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (เฉพาะ YouTube)
+      if (!songs[initialIndex].isLocal) {
+        ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+      }
     }
 
     final sources = songs.map((s) {
-      return AudioSource.uri(
-        Uri.parse(ApiConfig.streamUrl(s.id)),
-        tag: _songToMediaItem(s),
-        headers: {'User-Agent': 'Mozilla/5.0'},
-      );
+      if (s.isLocal && s.filePath != null) {
+        // 🎵 ไฟล์จากเครื่อง
+        return AudioSource.file(s.filePath!, tag: _songToMediaItem(s));
+      } else {
+        // 🌐 YouTube stream
+        return AudioSource.uri(
+          Uri.parse(ApiConfig.streamUrl(s.id)),
+          tag: _songToMediaItem(s),
+          headers: {'User-Agent': 'Mozilla/5.0'},
+        );
+      }
     }).toList();
 
     await _playlist.clear();
@@ -220,14 +235,20 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   MediaItem _songToMediaItem(Song song) {
+    Uri? artUri;
+    if (song.isLocal) {
+      // Local file — ไม่มี network art URI
+      artUri = null;
+    } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
+      artUri = Uri.parse(song.thumbnail);
+    }
+
     return MediaItem(
       id: song.id,
-      album: 'YouTube Music',
+      album: song.isLocal ? 'Local Music' : 'YouTube Music',
       title: song.title,
       artist: song.artist,
-      artUri: (song.thumbnail.isNotEmpty && song.thumbnail != "NA")
-          ? Uri.parse(song.thumbnail)
-          : null,
+      artUri: artUri,
       duration: Duration(seconds: song.duration),
     );
   }
