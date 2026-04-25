@@ -72,10 +72,17 @@ class PlayerScreen extends StatelessWidget {
         children: [
           // 🎵 Dynamic Blurred Background
           Positioned.fill(
-            child: CachedNetworkImage(
-              imageUrl: currentSong.thumbnailUrl,
-              fit: BoxFit.cover,
-            ),
+            child: currentSong.isLocal
+                ? (currentSong.coverArtBytes != null
+                    ? Image.memory(
+                        currentSong.coverArtBytes!,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(color: const Color(0xFF0D0D0D)))
+                : CachedNetworkImage(
+                    imageUrl: currentSong.thumbnailUrl,
+                    fit: BoxFit.cover,
+                  ),
           ),
           Positioned.fill(
             child: BackdropFilter(
@@ -223,35 +230,51 @@ class PlayerScreen extends StatelessWidget {
               : BorderRadius.circular(isTablet ? 20 : 16),
           child: AspectRatio(
             aspectRatio: 16 / 9,
-            child: CachedNetworkImage(
-              imageUrl: currentSong.maxResThumbnailUrl,
-              fit: BoxFit.cover,
-              errorWidget: (context, url, error) => CachedNetworkImage(
-                imageUrl: currentSong.sdThumbnailUrl,
-                fit: BoxFit.cover,
-                errorWidget: (context, url, secondError) => CachedNetworkImage(
-                  imageUrl: currentSong.hqThumbnailUrl,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, thirdError) => Container(
-                    color: const Color(0xFF1A1A1A),
-                    child: const Icon(
-                      Icons.music_note_rounded,
-                      color: Color(0xFF333333),
-                      size: 60,
+            child: currentSong.isLocal
+                ? (currentSong.coverArtBytes != null
+                    ? Image.memory(
+                        currentSong.coverArtBytes!,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(
+                        color: const Color(0xFF1A1A1A),
+                        child: const Center(
+                          child: Icon(
+                            Icons.music_note_rounded,
+                            color: Color(0xFFF15A24),
+                            size: 60,
+                          ),
+                        ),
+                      ))
+                : CachedNetworkImage(
+                    imageUrl: currentSong.maxResThumbnailUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => CachedNetworkImage(
+                      imageUrl: currentSong.sdThumbnailUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (context, url, secondError) => CachedNetworkImage(
+                        imageUrl: currentSong.hqThumbnailUrl,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, thirdError) => Container(
+                          color: const Color(0xFF1A1A1A),
+                          child: const Icon(
+                            Icons.music_note_rounded,
+                            color: Color(0xFF333333),
+                            size: 60,
+                          ),
+                        ),
+                      ),
+                    ),
+                    placeholder: (_, _) => Container(
+                      color: const Color(0xFF1A1A1A),
+                      child: const Center(
+                        child: CircularProgressIndicator(
+                          color: Color(0xFFF15A24),
+                          strokeWidth: 2,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              placeholder: (_, _) => Container(
-                color: const Color(0xFF1A1A1A),
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFFF15A24),
-                    strokeWidth: 2,
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
       ),
