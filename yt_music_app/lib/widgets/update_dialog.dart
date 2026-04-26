@@ -16,11 +16,13 @@ class _UpdateDialogState extends State<UpdateDialog> {
   String _statusMessage = '';
 
   Future<void> _startDownload() async {
-    // ขอสิทธิ์
+    // ขอสิทธิ์ติดตั้ง APK
     final hasPermission = await UpdateService.requestStoragePermission();
     if (!hasPermission && mounted) {
       setState(() {
-        _statusMessage = 'ไม่สามารถดาวน์โหลดได้เนื่องจากไม่ได้รับอนุญาตให้เขียนไฟล์';
+        _isDownloading = false;
+        _statusMessage =
+            'กรุณาอนุญาต "ติดตั้งแอปที่ไม่รู้จัก" ในการตั้งค่าเพื่อดำเนินการต่อ';
       });
       return;
     }
@@ -34,33 +36,39 @@ class _UpdateDialogState extends State<UpdateDialog> {
     final apkPath = await UpdateService.downloadApk(
       url: widget.updateInfo.downloadUrl,
       onReceiveProgress: (received, total) {
-        if (total != -1) {
-          if (mounted) {
-            setState(() {
-              _progress = received / total;
-              _statusMessage = 'ดาวน์โหลด ${(received / 1024 / 1024).toStringAsFixed(1)} MB / ${(total / 1024 / 1024).toStringAsFixed(1)} MB';
-            });
-          }
+        if (total != -1 && mounted) {
+          setState(() {
+            _progress = received / total;
+            _statusMessage =
+                'ดาวน์โหลด ${(received / 1024 / 1024).toStringAsFixed(1)} MB / ${(total / 1024 / 1024).toStringAsFixed(1)} MB';
+          });
         }
       },
     );
 
-    if (apkPath != null) {
-      if (mounted) {
-        setState(() {
-          _statusMessage = 'กำลังเตรียมการติดตั้ง...';
-        });
-      }
-      // สั่งติดตั้ง
-      await UpdateService.installApk(apkPath);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } else {
+    if (apkPath == null) {
       if (mounted) {
         setState(() {
           _isDownloading = false;
           _statusMessage = 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่';
+        });
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _statusMessage = 'กำลังเปิดหน้าติดตั้ง...');
+    }
+
+    final installed = await UpdateService.installApk(apkPath);
+    if (mounted) {
+      if (installed) {
+        Navigator.of(context).pop();
+      } else {
+        setState(() {
+          _isDownloading = false;
+          _statusMessage =
+              'ไม่สามารถเปิดตัวติดตั้งได้ กรุณาตรวจสอบสิทธิ์การติดตั้งแอปจากแหล่งที่ไม่รู้จัก';
         });
       }
     }

@@ -799,103 +799,160 @@ class _HomeScreenState extends State<HomeScreen> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: crossAxisCount,
-        crossAxisSpacing: isTablet ? 24 : 16,
-        mainAxisSpacing: isTablet ? 24 : 16,
-        childAspectRatio: isTablet ? 1.35 : 0.85,
+        crossAxisSpacing: isTablet ? 16 : 12,
+        mainAxisSpacing: isTablet ? 16 : 12,
+        childAspectRatio: 16 / 10,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
         final playlist = items[index];
         final isFavorite = playlist.id == -1;
 
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PlaylistScreen(playlist: playlist),
-              ),
-            );
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF141414),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF222222)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Container(color: const Color(0xFF1A1A1A)),
+              if (playlist.songs.isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: playlist.songs[0].maxResThumbnailUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (context, url, error) => CachedNetworkImage(
+                    imageUrl: playlist.songs[0].hqThumbnailUrl,
+                    fit: BoxFit.cover,
+                    errorWidget: (context, url, err) =>
+                        Container(color: const Color(0xFF1A1A1A)),
+                  ),
+                ),
+              if (playlist.songs.isEmpty)
+                Center(
+                  child: Icon(
+                    isFavorite
+                        ? Icons.favorite_rounded
+                        : Icons.queue_music_rounded,
+                    color: isFavorite
+                        ? const Color(0xFFFF4466).withValues(alpha: 0.4)
+                        : const Color(0xFF444444),
+                    size: 36,
+                  ),
+                ),
+              // Gradient overlay
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0.3, 1.0],
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.85),
+                      ],
                     ),
-                    child: Container(
-                      color: isFavorite
-                          ? const Color(0xFFFF4466).withValues(alpha: 0.1)
-                          : const Color(0xFF252525),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (playlist.songs.isNotEmpty)
-                            CachedNetworkImage(
-                              imageUrl: playlist.songs[0].maxResThumbnailUrl,
-                              fit: BoxFit.cover,
-                              errorWidget: (context, url, error) =>
-                                  CachedNetworkImage(
-                                    imageUrl: playlist.songs[0].hqThumbnailUrl,
-                                    fit: BoxFit.cover,
-                                    errorWidget: (context, url, err) =>
-                                        Container(color: Colors.transparent),
-                                  ),
-                            ),
-                          if (playlist.songs.isEmpty)
-                            Center(
-                              child: Icon(
-                                isFavorite
-                                    ? Icons.favorite_rounded
-                                    : Icons.queue_music_rounded,
-                                color: isFavorite
-                                    ? const Color(0xFFFF4466)
-                                    : const Color(0xFF777777),
-                                size: 40,
-                              ),
-                            ),
+                  ),
+                ),
+              ),
+              // Favorite badge
+              if (isFavorite)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF4466).withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.favorite_rounded,
+                      color: Colors.white,
+                      size: 11,
+                    ),
+                  ),
+                ),
+              // Song count badge
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${playlist.songs.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
+              ),
+              // Title + subtitle on gradient
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 10,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      playlist.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1,
+                        shadows: [
+                          Shadow(color: Colors.black, blurRadius: 6),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${playlist.songs.length} เพลง',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                        fontSize: 10,
+                        shadows: const [
+                          Shadow(color: Colors.black, blurRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Ripple overlay
+              Positioned.fill(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    splashColor: Colors.white.withValues(alpha: 0.08),
+                    highlightColor: Colors.white.withValues(alpha: 0.04),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              PlaylistScreen(playlist: playlist),
+                        ),
+                      );
+                    },
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        playlist.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${playlist.songs.length} เพลง',
-                        style: const TextStyle(
-                          color: Color(0xFF888888),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

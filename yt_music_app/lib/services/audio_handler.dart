@@ -237,8 +237,8 @@ class MyAudioHandler extends BaseAudioHandler {
   MediaItem _songToMediaItem(Song song) {
     Uri? artUri;
     if (song.isLocal) {
-      // Local file — ไม่มี network art URI
-      artUri = null;
+      // Local file — ไม่มี network art URI ให้ใช้ dummy URI
+      artUri = Uri.parse('local_art://${song.id}');
     } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
       artUri = Uri.parse(song.thumbnail);
     }
@@ -250,6 +250,10 @@ class MyAudioHandler extends BaseAudioHandler {
       artist: song.artist,
       artUri: artUri,
       duration: Duration(seconds: song.duration),
+      extras: {
+        'isLocal': song.isLocal,
+        'filePath': song.filePath,
+      },
     );
   }
 

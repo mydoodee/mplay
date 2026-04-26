@@ -38,101 +38,108 @@ class UpdateService {
   static Future<AppUpdateInfo?> checkForUpdate() async {
     try {
       final response = await _dio.get(ApiConfig.updateUrl);
-      if (response.statusCode == 200 && response.data != null && response.data.toString().isNotEmpty) {
-        final Map<String, dynamic> data = response.data is String 
-            ? json.decode(response.data) 
+      if (response.statusCode == 200 &&
+          response.data != null &&
+          response.data.toString().isNotEmpty) {
+        final Map<String, dynamic> data = response.data is String
+            ? json.decode(response.data)
             : response.data;
-            
+
         final updateInfo = AppUpdateInfo.fromJson(data);
-        
-        // เช็คกับเวอร์ชันปัจจุบัน
+
         final packageInfo = await PackageInfo.fromPlatform();
         final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
 
-        // ถ้า build_number ในเซิร์ฟเวอร์ใหม่กว่า แสดงว่ามีอัปเดต
         if (updateInfo.buildNumber > currentBuild) {
           return updateInfo;
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        print('Update Check Error: $e');
-      }
+      if (kDebugMode) print('Update Check Error: $e');
     }
     return null;
   }
 
-  /// ขอสิทธิ์ Storage (จำเป็นสำหรับเซฟไฟล์)
+  /// ขอสิทธิ์ติดตั้ง APK — คืน false ถ้าผู้ใช้ปฏิเสธ
   static Future<bool> requestStoragePermission() async {
     if (Platform.isAndroid) {
-      // ใน Android 13+ (API 33) การขอ Permission.storage จะถูกปฏิเสธเสมอ
-      // แต่เราสามารถเขียนไฟล์ลงใน App Cache/External Cache ได้โดยไม่ต้องขอสิทธิ์
-      // ดังนั้นเราจะขอแค่สิทธิ์ติดตั้ง (ถ้ายังไม่ได้ขอ) และคืนค่า true เพื่อให้ดาวน์โหลดต่อได้
-      await Permission.requestInstallPackages.request();
-      return true; 
+      final status = await Permission.requestInstallPackages.status;
+      if (!status.isGranted) {
+        final result = await Permission.requestInstallPackages.request();
+        if (!result.isGranted) {
+          if (kDebugMode) print('REQUEST_INSTALL_PACKAGES denied by user');
+          return false;
+        }
+      }
+      return true;
     }
     return true;
   }
 
-  /// ดาวน์โหลดไฟล์ APK 
+  /// ดาวน์โหลด APK ลง Internal Documents Directory (ใช้กับ FileProvider ได้เสมอ)
   static Future<String?> downloadApk({
     required String url,
     required Function(int received, int total) onReceiveProgress,
   }) async {
     try {
-      // ขอสิทธิ์ติดตั้งแพ็กเกจ (เผื่อไว้)
-      if (Platform.isAndroid) {
-        await Permission.requestInstallPackages.request();
-      }
-
-      // หาที่เซฟไฟล์ (ใช้ External Cache จะได้ไม่รกเครื่อง)
-      Directory? dir;
-      if (Platform.isAndroid) {
-        dir = await getExternalCacheDirectories().then((dirs) => dirs?.first);
-      } else {
-        dir = await getTemporaryDirectory();
-      }
-      
-      if (dir == null) return null;
-      
+      final dir = await getApplicationDocumentsDirectory();
       final savePath = '${dir.path}/app_update.apk';
-      
-      // ลบไฟล์เก่าทิ้งถ้ามี
+
+      // ลบไฟล์เก่าก่อนดาวน์โหลด
       final file = File(savePath);
-      if (await file.exists()) {
-        await file.delete();
-      }
+      if (await file.exists()) await file.delete();
 
       await _dio.download(
         url,
         savePath,
         onReceiveProgress: onReceiveProgress,
         options: Options(
-          receiveTimeout: const Duration(minutes: 5),
+          receiveTimeout: const Duration(minutes: 10),
           responseType: ResponseType.bytes,
         ),
       );
 
+      // ตรวจสอบว่าไฟล์ครบถ้วน
+      final saved = File(savePath);
+      if (!await saved.exists() || await saved.length() == 0) {
+        if (kDebugMode) print('APK download failed or file empty');
+        return null;
+      }
+
+      if (kDebugMode) {
+        final mb = (await saved.length()) / 1024 / 1024;
+        print('APK ready: $savePath (${mb.toStringAsFixed(2)} MB)');
+      }
+
       return savePath;
     } catch (e) {
-      if (kDebugMode) {
-        print('Download APK Error: $e');
-      }
+      if (kDebugMode) print('Download APK Error: $e');
       return null;
     }
   }
 
-  /// ติดตั้ง APK
-  static Future<void> installApk(String filePath) async {
+  /// เปิด Installer ด้วย MIME type ที่ถูกต้อง (ต้องมี FileProvider ใน AndroidManifest)
+  static Future<bool> installApk(String filePath) async {
     try {
-      final result = await OpenFilex.open(filePath);
-      if (kDebugMode) {
-        print('Install result: ${result.message}');
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (kDebugMode) print('APK not found at: $filePath');
+        return false;
       }
+
+      final result = await OpenFilex.open(
+        filePath,
+        type: 'application/vnd.android.package-archive',
+      );
+
+      if (kDebugMode) {
+        print('OpenFilex → type:${result.type}  msg:${result.message}');
+      }
+
+      return result.type == ResultType.done;
     } catch (e) {
-      if (kDebugMode) {
-        print('Install execution error: $e');
-      }
+      if (kDebugMode) print('Install error: $e');
+      return false;
     }
   }
 }
