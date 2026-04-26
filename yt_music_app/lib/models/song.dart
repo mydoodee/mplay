@@ -79,6 +79,8 @@ class Song {
       'artist': artist,
       'thumbnail': thumbnail,
       'duration': duration,
+      'is_local': isLocal ? 1 : 0,
+      'file_path': filePath,
     };
   }
 
@@ -89,6 +91,8 @@ class Song {
       artist: map['artist'] ?? 'Unknown Artist',
       thumbnail: map['thumbnail'] ?? '',
       duration: map['duration'] ?? 0,
+      isLocal: (map['is_local'] == 1),
+      filePath: map['file_path'],
     );
   }
 

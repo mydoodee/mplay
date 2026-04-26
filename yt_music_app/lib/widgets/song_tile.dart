@@ -246,7 +246,7 @@ class SongTile extends StatelessWidget {
       highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.05),
       borderRadius: isPlaying ? BorderRadius.circular(14) : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -361,6 +361,7 @@ class SongTile extends StatelessWidget {
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,

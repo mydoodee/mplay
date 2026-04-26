@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:audiotags/audiotags.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
 
 /// Service สำหรับจัดการเพลงจากไฟล์ในเครื่อง / USB Drive
@@ -123,11 +124,49 @@ class LocalMusicService {
         coverArt = tag.pictures.first.bytes;
       }
 
+      // 🖼️ Fallback: ลองหาไฟล์รูปปกในโฟลเดอร์เดียวกัน (cover.jpg, folder.jpg ฯลฯ)
+      if (coverArt == null || coverArt.isEmpty) {
+        try {
+          final directory = file.parent;
+          final possibleNames = [
+            'cover.jpg', 'cover.jpeg', 'cover.png',
+            'folder.jpg', 'folder.jpeg', 'folder.png',
+            'albumart.jpg', 'albumartsmall.jpg'
+          ];
+          
+          for (final name in possibleNames) {
+            final imgFile = File('${directory.path}${Platform.pathSeparator}$name');
+            if (await imgFile.exists()) {
+              coverArt = await imgFile.readAsBytes();
+              break;
+            }
+          }
+        } catch (_) {
+          // Ignore directory access errors
+        }
+      }
+
+      // ดึงความยาวเพลงโดยใช้ just_audio
+      int durationSeconds = 0;
+      final player = AudioPlayer();
+      try {
+        final duration = await player.setFilePath(filePath);
+        if (duration != null) {
+          durationSeconds = duration.inSeconds;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error getting duration for $filePath: $e');
+        }
+      } finally {
+        await player.dispose();
+      }
+
       return Song.fromLocalFile(
         filePath: filePath,
         title: trackName,
         artist: artist,
-        duration: 0, // audiotags 1.4.0 อาจไม่ได้คืน duration โดยตรงในบางไฟล์ ให้ player จัดการ
+        duration: durationSeconds,
         coverArtBytes: coverArt,
       );
     } catch (e) {
@@ -148,4 +187,34 @@ class LocalMusicService {
       }
     }
   }
+
+  /// ดึงแค่รูปปก (Album Art / Folder.jpg) สำหรับเพลงที่ไม่ได้ถูกโหลดไว้ในหน่วยความจำ
+  Future<Uint8List?> extractCoverArt(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) return null;
+
+      final tag = await AudioTags.read(filePath);
+      if (tag != null && tag.pictures.isNotEmpty) {
+        return tag.pictures.first.bytes;
+      }
+
+      // Fallback folder.jpg
+      final directory = file.parent;
+      final possibleNames = [
+        'cover.jpg', 'cover.jpeg', 'cover.png',
+        'folder.jpg', 'folder.jpeg', 'folder.png',
+        'albumart.jpg', 'albumartsmall.jpg'
+      ];
+      
+      for (final name in possibleNames) {
+        final imgFile = File('${directory.path}${Platform.pathSeparator}$name');
+        if (await imgFile.exists()) {
+          return await imgFile.readAsBytes();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
 }
+

@@ -62,8 +62,23 @@ class SongProvider with ChangeNotifier {
 
   void _initAudioListener() {
     // Sync current song with audio handler
-    audioHandler?.mediaItem.listen((item) {
+    audioHandler?.mediaItem.listen((item) async {
       if (item != null && item.id.isNotEmpty) {
+        final isLocal = item.extras?['isLocal'] == true;
+        final filePath = item.extras?['filePath'] as String?;
+        
+        Uint8List? coverArtBytes;
+        if (isLocal && filePath != null) {
+          // If the song is already in _localSongs, just use its coverArtBytes
+          try {
+             final existing = _localSongs.firstWhere((s) => s.id == item.id);
+             coverArtBytes = existing.coverArtBytes;
+          } catch (_) {
+             // Extract on the fly if not in RAM (e.g. played from Playlist/History)
+             coverArtBytes = await _localMusicService.extractCoverArt(filePath);
+          }
+        }
+
         Future.microtask(() {
           _currentSong = Song(
             id: item.id,
@@ -71,6 +86,9 @@ class SongProvider with ChangeNotifier {
             artist: item.artist ?? '',
             thumbnail: item.artUri?.toString() ?? '',
             duration: item.duration?.inSeconds ?? 0,
+            isLocal: isLocal,
+            filePath: filePath,
+            coverArtBytes: coverArtBytes,
           );
           notifyListeners();
         });
@@ -163,12 +181,30 @@ class SongProvider with ChangeNotifier {
   Future<void> playPrevious() async => audioHandler?.skipToPrevious();
 
   Future<void> _loadFavorites() async {
-    _favorites = await _dbHelper.getFavorites();
+    final rawFavorites = await _dbHelper.getFavorites();
+    final validFavorites = <Song>[];
+    for (final song in rawFavorites) {
+      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        await _dbHelper.removeFavorite(song.id);
+      } else {
+        validFavorites.add(song);
+      }
+    }
+    _favorites = validFavorites;
     notifyListeners();
   }
 
   Future<void> _loadHistory() async {
-    _history = await _dbHelper.getHistory();
+    final rawHistory = await _dbHelper.getHistory();
+    final validHistory = <Song>[];
+    for (final song in rawHistory) {
+      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        await _dbHelper.removeFromHistory(song.id);
+      } else {
+        validHistory.add(song);
+      }
+    }
+    _history = validHistory;
     notifyListeners();
   }
 
@@ -192,7 +228,16 @@ class SongProvider with ChangeNotifier {
     final maps = await _dbHelper.getPlaylists();
     _playlists = maps.map((m) => Playlist.fromMap(m)).toList();
     for (var playlist in _playlists) {
-      playlist.songs = await _dbHelper.getSongsForPlaylist(playlist.id);
+      final rawSongs = await _dbHelper.getSongsForPlaylist(playlist.id);
+      final validSongs = <Song>[];
+      for (final song in rawSongs) {
+        if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+          await _dbHelper.removeSongFromPlaylist(playlist.id, song.id);
+        } else {
+          validSongs.add(song);
+        }
+      }
+      playlist.songs = validSongs;
     }
     notifyListeners();
   }
