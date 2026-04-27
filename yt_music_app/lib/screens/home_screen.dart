@@ -822,7 +822,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     imageUrl: playlist.songs[0].hqThumbnailUrl,
                     fit: BoxFit.cover,
                     errorWidget: (context, url, err) =>
-                        Container(color: const Color(0xFF1A1A1A)),
+                        Container(
+                          color: const Color(0xFF1A1A1A),
+                          child: const Center(
+                            child: AppLogo(size: 40, showText: false),
+                          ),
+                        ),
                   ),
                 ),
               if (playlist.songs.isEmpty)

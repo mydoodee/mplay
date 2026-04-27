@@ -78,10 +78,21 @@ class PlayerScreen extends StatelessWidget {
                         currentSong.coverArtBytes!,
                         fit: BoxFit.cover,
                       )
-                    : Container(color: const Color(0xFF0D0D0D)))
+                    : Container(
+                        color: const Color(0xFF0D0D0D),
+                        child: const Center(
+                          child: AppLogo(size: 100, showText: false, color: Colors.white24),
+                        ),
+                      ))
                 : CachedNetworkImage(
                     imageUrl: currentSong.thumbnailUrl,
                     fit: BoxFit.cover,
+                    errorWidget: (context, url, error) => Container(
+                      color: const Color(0xFF0D0D0D),
+                      child: const Center(
+                        child: AppLogo(size: 100, showText: false, color: Colors.white24),
+                      ),
+                    ),
                   ),
           ),
           Positioned.fill(
@@ -239,10 +250,9 @@ class PlayerScreen extends StatelessWidget {
                     : Container(
                         color: const Color(0xFF1A1A1A),
                         child: const Center(
-                          child: Icon(
-                            Icons.music_note_rounded,
-                            color: Color(0xFFF15A24),
+                          child: AppLogo(
                             size: 60,
+                            showText: false,
                           ),
                         ),
                       ))
@@ -257,10 +267,11 @@ class PlayerScreen extends StatelessWidget {
                         fit: BoxFit.cover,
                         errorWidget: (context, url, thirdError) => Container(
                           color: const Color(0xFF1A1A1A),
-                          child: const Icon(
-                            Icons.music_note_rounded,
-                            color: Color(0xFF333333),
-                            size: 60,
+                          child: const Center(
+                            child: AppLogo(
+                              size: 60,
+                              showText: false,
+                            ),
                           ),
                         ),
                       ),
@@ -475,6 +486,9 @@ class PlayerScreen extends StatelessWidget {
                 if (playing) {
                   audioHandler?.pause();
                 } else {
+                  if (processingState == AudioProcessingState.completed) {
+                    audioHandler?.seek(Duration.zero);
+                  }
                   audioHandler?.play();
                 }
               },

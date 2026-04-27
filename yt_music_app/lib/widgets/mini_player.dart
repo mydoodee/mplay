@@ -200,6 +200,9 @@ class MiniPlayer extends StatelessWidget {
                               if (playing) {
                                 audioHandler?.pause();
                               } else {
+                                if (processingState == AudioProcessingState.completed) {
+                                  audioHandler?.seek(Duration.zero);
+                                }
                                 audioHandler?.play();
                               }
                             },

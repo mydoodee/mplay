@@ -237,8 +237,8 @@ class MyAudioHandler extends BaseAudioHandler {
   MediaItem _songToMediaItem(Song song) {
     Uri? artUri;
     if (song.isLocal) {
-      // Local file — ไม่มี network art URI ให้ใช้ dummy URI
-      artUri = Uri.parse('local_art://${song.id}');
+      // Local file — ตั้งเป็น null เพื่อป้องกัน Android SystemUI crash จาก dummy URI
+      artUri = null;
     } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
       artUri = Uri.parse(song.thumbnail);
     }

@@ -268,10 +268,9 @@ class SongTile extends StatelessWidget {
                               height: thumbH,
                               color: const Color(0xFF1E1E1E),
                               child: const Center(
-                                child: Icon(
-                                  Icons.music_note_rounded,
-                                  color: Color(0xFFF15A24),
-                                  size: 28,
+                                child: AppLogo(
+                                  size: 22,
+                                  showText: false,
                                 ),
                               ),
                             ))
