@@ -154,8 +154,9 @@ class SongProvider with ChangeNotifier {
       } else {
         await audioHandler?.playSong(song);
       }
-      await _dbHelper.addToHistory(song);
-      await _loadHistory(); // Refresh history
+      
+      // 🚀 ทำงานเบื้องหลัง ไม่ต้องรอ (Non-blocking)
+      _dbHelper.addToHistory(song).then((_) => _loadHistory());
     } catch (e) {
       if (kDebugMode) {
         print('DB/Audio Error in playSong: $e');
@@ -165,10 +166,14 @@ class SongProvider with ChangeNotifier {
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
-    for (var song in songs) {
-      await _dbHelper.addToHistory(song);
-    }
-    await _loadHistory();
+    
+    // 🚀 บันทึกประวัติแบบเบื้องหลัง
+    Future.microtask(() async {
+      for (var song in songs) {
+        await _dbHelper.addToHistory(song);
+      }
+      await _loadHistory();
+    });
   }
 
   Future<void> shuffleAll(List<Song> songs) async {
