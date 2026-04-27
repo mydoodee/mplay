@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import '../models/song.dart';
 import '../config/api_config.dart';
 import 'api_service.dart';
@@ -23,15 +25,16 @@ class MyAudioHandler extends BaseAudioHandler {
       ),
       audioLoadConfiguration: AudioLoadConfiguration(
         androidLoadControl: AndroidLoadControl(
-          minBufferDuration: const Duration(minutes: 5),
-          maxBufferDuration: const Duration(minutes: 10),
-          bufferForPlaybackDuration: const Duration(seconds: 2),
-          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3),
-          targetBufferBytes: 1024 * 1024 * 50,
+          minBufferDuration: const Duration(minutes: 1),
+          maxBufferDuration: const Duration(minutes: 5),
+          // 🚀 ปรับเป็น 1s เพื่อความเสถียร (ถ้าเน็ตแกว่ง 200ms จะไม่พอและเกิด Timeout)
+          bufferForPlaybackDuration: const Duration(seconds: 1),
+          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 2),
+          targetBufferBytes: 1024 * 1024 * 30, // 30MB
         ),
         darwinLoadControl: DarwinLoadControl(
-          preferredForwardBufferDuration: const Duration(minutes: 5),
-          automaticallyWaitsToMinimizeStalling: true,
+          preferredForwardBufferDuration: const Duration(minutes: 3),
+          automaticallyWaitsToMinimizeStalling: false, // 🚀 เล่นเร็ว ไม่รอ network
         ),
       ),
     );
@@ -58,8 +61,25 @@ class MyAudioHandler extends BaseAudioHandler {
     _player.currentIndexStream.listen((index) {
       if (index != null && index >= 0 && index < queue.value.length) {
         mediaItem.add(queue.value[index]);
-        // แอบโหลดลิงก์เพลงถัดไป 1-2 เพลงส่งไปแคชไว้ที่ API Server แบบเบื้องหลัง
         _preCacheNextTracksInServer(index);
+      }
+    });
+
+    // 🚀 เพิ่มระบบจัดการ Error ของ Player
+    _player.playbackEventStream.listen((event) {}, onError: (Object e, StackTrace st) {
+      if (e is PlatformException && e.code == '0') {
+        if (kDebugMode) print('🎵 Player Source Error: $e');
+        // ถ้าโหลดไม่ได้ (เช่นเน็ตหลุด) ให้รอแป๊บแล้วลองข้ามไปเพลงถัดไปหรือลองใหม่
+        _handlePlaybackError();
+      }
+    });
+  }
+
+  void _handlePlaybackError() {
+    // ป้องกันแอปค้างด้วยการลองสั่งเล่นใหม่หลังจาก 2 วินาที
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!_player.playing && _player.processingState == ProcessingState.idle) {
+        _player.play().catchError((_) => null);
       }
     });
   }
@@ -86,12 +106,12 @@ class MyAudioHandler extends BaseAudioHandler {
     final item = _songToMediaItem(song);
     int existingIndex = queue.value.indexWhere((i) => i.id == song.id);
 
-    // 🚀 อัพเดท UI ทันทีไม่ต้องรอโหลด เพื่อไม่ให้หน้าเพลย์เยอร์หายหรือค้าง
+    // 🚀 อัพเดท UI ทันทีไม่ต้องรอโหลด
     mediaItem.add(item);
 
     if (existingIndex != -1) {
-      // มีอยู่ในคิวแล้ว ให้เล่นเลย
-      await _player.seek(Duration.zero, index: existingIndex);
+      // มีอยู่ในคิวแล้ว seek + play ทันที
+      _player.seek(Duration.zero, index: existingIndex); // ไม่ await
       _player.play();
     } else {
       // เพิ่มเข้าคิวใหม่
@@ -110,13 +130,21 @@ class MyAudioHandler extends BaseAudioHandler {
           tag: item,
           headers: {'User-Agent': 'Mozilla/5.0'},
         );
-        // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
+        // 🚀 บอกให้ Server เริ่มโหลดลิงก์ไว้เลย (parallel กับ player setup)
         ApiService().getAudioUrl(song.id).catchError((_) => null);
       }
 
-      await _playlist.add(source);
-      await _player.seek(Duration.zero, index: currentQueue.length - 1);
-      _player.play();
+      // 🚀 add + seek + play แบบ non-blocking — ไม่รอ I/O
+      unawaited(_playlist.add(source).then((_) async {
+        try {
+          await _player.seek(Duration.zero, index: currentQueue.length - 1);
+          await _player.play();
+        } catch (e) {
+          if (kDebugMode) print('❌ Playback error in playSong: $e');
+        }
+      }).catchError((e) {
+        if (kDebugMode) print('❌ Playlist add error: $e');
+      }));
     }
   }
 
@@ -126,36 +154,110 @@ class MyAudioHandler extends BaseAudioHandler {
     final items = songs.map(_songToMediaItem).toList();
     queue.add(items);
 
+    // 🚀 Step 1: โชว์ UI ทันที
     if (initialIndex >= 0 && initialIndex < items.length) {
-      // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที"
       mediaItem.add(items[initialIndex]);
+    }
 
-      // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (เฉพาะ YouTube)
-      if (!songs[initialIndex].isLocal) {
-        ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+    final Song firstSong = songs[initialIndex];
+    final MediaItem firstItem = items[initialIndex];
+
+    // 🚀 Step 2: บอกให้ Server เริ่มโหลดลิงก์ไว้ทันที (แบบ parallel)
+    // เพื่อให้เวลา yt-dlp ทำงานพร้อมกับที่แอปเตรียม Player
+    if (!firstSong.isLocal) {
+      ApiService().getAudioUrl(firstSong.id).catchError((_) => null);
+    }
+
+    // 🚀 Step 3: สร้าง source เพลงแรก
+    final AudioSource firstSource = firstSong.isLocal && firstSong.filePath != null
+        ? AudioSource.file(firstSong.filePath!, tag: firstItem)
+        : AudioSource.uri(
+            Uri.parse(ApiConfig.streamUrl(firstSong.id)),
+            tag: firstItem,
+            headers: {'User-Agent': 'Mozilla/5.0'},
+          );
+
+    await _playlist.clear();
+    try {
+      await _playlist.add(firstSource);
+      await _player.seek(Duration.zero, index: 0);
+      await _player.play(); // 🚀 เล่นทันที ไม่รอโหลดเพลงอื่น
+    } catch (e) {
+      if (kDebugMode) print('❌ Error starting first song: $e');
+      await _player.stop().catchError((_) => null);
+    }
+
+    // 🚀 Step 4: โหลดเพลงที่เหลือใน background
+    if (songs.length > 1) {
+      unawaited(_loadRemainingQueue(songs, items, initialIndex));
+    }
+  }
+
+  /// โหลดเพลงที่เหลือใน background หลังจากเพลงแรกเริ่มเล่นแล้ว
+  Future<void> _loadRemainingQueue(
+    List<Song> songs,
+    List<MediaItem> items,
+    int initialIndex,
+  ) async {
+    // 🚀 พยายามดึง direct URL ล่วงหน้า 10 เพลงถัดไปเพื่อข้าม Redirect
+    final List<String> nextBatchIds = [];
+    for (int i = initialIndex + 1; i < songs.length && i < initialIndex + 11; i++) {
+      if (!songs[i].isLocal) nextBatchIds.add(songs[i].id);
+    }
+
+    Map<String, String?> directUrls = {};
+    if (nextBatchIds.isNotEmpty) {
+      try {
+        directUrls = await ApiService().batchResolveUrls(nextBatchIds);
+      } catch (e) {
+        if (kDebugMode) print('❌ Batch resolve failed: $e');
       }
     }
 
-    final sources = songs.map((s) {
-      if (s.isLocal && s.filePath != null) {
-        // 🎵 ไฟล์จากเครื่อง
-        return AudioSource.file(s.filePath!, tag: _songToMediaItem(s));
-      } else {
-        // 🌐 YouTube stream
-        return AudioSource.uri(
-          Uri.parse(ApiConfig.streamUrl(s.id)),
-          tag: _songToMediaItem(s),
-          headers: {'User-Agent': 'Mozilla/5.0'},
-        );
-      }
-    }).toList();
+    final otherSources = <AudioSource>[];
 
-    await _playlist.clear();
-    await _playlist.addAll(sources);
+    // เพลงก่อน initialIndex (ใช้ streamUrl ปกติเพราะโอกาสเล่นน้อยกว่า)
+    for (int i = 0; i < initialIndex; i++) {
+      final s = songs[i];
+      otherSources.add(
+        s.isLocal && s.filePath != null
+            ? AudioSource.file(s.filePath!, tag: items[i])
+            : AudioSource.uri(
+                Uri.parse(ApiConfig.streamUrl(s.id)),
+                tag: items[i],
+                headers: {'User-Agent': 'Mozilla/5.0'},
+              ),
+      );
+    }
 
-    if (initialIndex >= 0 && initialIndex < sources.length) {
+    // เพลงหลัง initialIndex (ใช้ streamUrl ปกติ แต่ Server จะมี Cache แล้วเพราะเราสั่ง batchResolve)
+    for (int i = initialIndex + 1; i < songs.length; i++) {
+      final s = songs[i];
+      otherSources.add(
+        s.isLocal && s.filePath != null
+            ? AudioSource.file(s.filePath!, tag: items[i])
+            : AudioSource.uri(
+                Uri.parse(ApiConfig.streamUrl(s.id)),
+                tag: items[i],
+                headers: {'User-Agent': 'Mozilla/5.0'},
+              ),
+      );
+    }
+
+    // insert เพลงก่อน initialIndex ที่ตำแหน่ง 0
+    if (initialIndex > 0) {
+      await _playlist.insertAll(0, otherSources.sublist(0, initialIndex));
+    }
+    // add เพลงหลัง initialIndex
+    if (initialIndex + 1 < songs.length) {
+      await _playlist.addAll(
+        otherSources.sublist(initialIndex > 0 ? initialIndex : 0),
+      );
+    }
+
+    // Seek ไปที่ index ที่ถูกต้องหลัง insert
+    if (initialIndex > 0) {
       await _player.seek(Duration.zero, index: initialIndex);
-      _player.play();
     }
   }
 
@@ -220,13 +322,31 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() async {
+    try {
+      await _player.play();
+    } catch (e) {
+      if (kDebugMode) print('❌ Manual play error: $e');
+    }
+  }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() async {
+    try {
+      await _player.pause();
+    } catch (e) {
+      if (kDebugMode) print('❌ Manual pause error: $e');
+    }
+  }
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) async {
+    try {
+      await _player.seek(position);
+    } catch (e) {
+      if (kDebugMode) print('❌ Manual seek error: $e');
+    }
+  }
 
   @override
   Future<void> stop() async {
