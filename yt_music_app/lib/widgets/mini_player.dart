@@ -100,7 +100,27 @@ class MiniPlayer extends StatelessWidget {
                               isTablet ? 10 : 8,
                             ),
                             child:
-                                currentSong.thumbnail.isNotEmpty &&
+                                currentSong.isLocal
+                                    ? (currentSong.coverArtBytes != null
+                                        ? Image.memory(
+                                            currentSong.coverArtBytes!,
+                                            width: albumArtSize,
+                                            height: albumArtSize,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(
+                                            width: albumArtSize,
+                                            height: albumArtSize,
+                                            color: const Color(0xFF252525),
+                                            child: Center(
+                                              child: Icon(
+                                                Icons.music_note_rounded,
+                                                color: const Color(0xFFF15A24),
+                                                size: isTablet ? 26 : 20,
+                                              ),
+                                            ),
+                                          ))
+                                    : (currentSong.thumbnail.isNotEmpty &&
                                         currentSong.thumbnail != "NA"
                                     ? CachedNetworkImage(
                                         imageUrl: currentSong.thumbnail,
@@ -118,7 +138,7 @@ class MiniPlayer extends StatelessWidget {
                                             showText: false,
                                           ),
                                         ),
-                                      ),
+                                      )),
                           ),
                         ),
                         SizedBox(width: isTablet ? 16 : 12),
@@ -180,6 +200,9 @@ class MiniPlayer extends StatelessWidget {
                               if (playing) {
                                 audioHandler?.pause();
                               } else {
+                                if (processingState == AudioProcessingState.completed) {
+                                  audioHandler?.seek(Duration.zero);
+                                }
                                 audioHandler?.play();
                               }
                             },

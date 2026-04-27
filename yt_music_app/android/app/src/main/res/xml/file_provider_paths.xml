@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Internal cache (getFilesDir) -->
+    <files-path name="internal_files" path="." />
+    <!-- App cache dir (getCacheDir) -->
+    <cache-path name="cache" path="." />
+    <!-- External cache dir (getExternalCacheDir) -->
+    <external-cache-path name="external_cache" path="." />
+    <!-- External files dir -->
+    <external-files-path name="external_files" path="." />
+</paths>

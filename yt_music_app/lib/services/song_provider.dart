@@ -1,18 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
 import 'api_service.dart';
+import 'local_music_service.dart';
 import '../database/db_helper.dart';
 import '../main.dart'; // To access audioHandler
 
 class SongProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final DbHelper _dbHelper = DbHelper();
-  
+  final LocalMusicService _localMusicService = LocalMusicService();
+
   List<Song> _searchResults = [];
   List<Song> get searchResults => _searchResults;
-  
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -37,6 +40,16 @@ class SongProvider with ChangeNotifier {
   List<Song> _history = [];
   List<Song> get history => _history;
 
+  // Local Music State
+  final List<Song> _localSongs = [];
+  List<Song> get localSongs => _localSongs;
+
+  bool _isScanning = false;
+  bool get isScanning => _isScanning;
+
+  final List<String> _addedFolders = [];
+  List<String> get addedFolders => _addedFolders;
+
   SongProvider() {
     // Initialize lazily or after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,8 +62,23 @@ class SongProvider with ChangeNotifier {
 
   void _initAudioListener() {
     // Sync current song with audio handler
-    audioHandler?.mediaItem.listen((item) {
+    audioHandler?.mediaItem.listen((item) async {
       if (item != null && item.id.isNotEmpty) {
+        final isLocal = item.extras?['isLocal'] == true;
+        final filePath = item.extras?['filePath'] as String?;
+        
+        Uint8List? coverArtBytes;
+        if (isLocal && filePath != null) {
+          // If the song is already in _localSongs, just use its coverArtBytes
+          try {
+             final existing = _localSongs.firstWhere((s) => s.id == item.id);
+             coverArtBytes = existing.coverArtBytes;
+          } catch (_) {
+             // Extract on the fly if not in RAM (e.g. played from Playlist/History)
+             coverArtBytes = await _localMusicService.extractCoverArt(filePath);
+          }
+        }
+
         Future.microtask(() {
           _currentSong = Song(
             id: item.id,
@@ -58,6 +86,9 @@ class SongProvider with ChangeNotifier {
             artist: item.artist ?? '',
             thumbnail: item.artUri?.toString() ?? '',
             duration: item.duration?.inSeconds ?? 0,
+            isLocal: isLocal,
+            filePath: filePath,
+            coverArtBytes: coverArtBytes,
           );
           notifyListeners();
         });
@@ -72,31 +103,37 @@ class SongProvider with ChangeNotifier {
     _hasMoreResults = true;
     _searchResults = [];
     notifyListeners();
-    
-    final results = await _apiService.searchSongs(query, limit: _pageSize, offset: 0);
+
+    final results = await _apiService.searchSongs(
+      query,
+      limit: _pageSize,
+      offset: 0,
+    );
     _searchResults = results;
-    
+
     if (results.length < _pageSize) {
       _hasMoreResults = false;
     }
-    
+
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> searchMore() async {
-    if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) return;
-    
+    if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) {
+      return;
+    }
+
     _isFetchingMore = true;
     notifyListeners();
-    
+
     final currentOffset = _searchResults.length;
     final moreResults = await _apiService.searchSongs(
-      _currentSearchQuery, 
-      limit: _pageSize, 
+      _currentSearchQuery,
+      limit: _pageSize,
       offset: currentOffset,
     );
-    
+
     if (moreResults.isEmpty) {
       _hasMoreResults = false;
     } else {
@@ -105,7 +142,7 @@ class SongProvider with ChangeNotifier {
         _hasMoreResults = false;
       }
     }
-    
+
     _isFetchingMore = false;
     notifyListeners();
   }
@@ -120,14 +157,16 @@ class SongProvider with ChangeNotifier {
       await _dbHelper.addToHistory(song);
       await _loadHistory(); // Refresh history
     } catch (e) {
-      print('DB/Audio Error in playSong: $e');
+      if (kDebugMode) {
+        print('DB/Audio Error in playSong: $e');
+      }
     }
   }
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
     for (var song in songs) {
-       await _dbHelper.addToHistory(song);
+      await _dbHelper.addToHistory(song);
     }
     await _loadHistory();
   }
@@ -142,12 +181,30 @@ class SongProvider with ChangeNotifier {
   Future<void> playPrevious() async => audioHandler?.skipToPrevious();
 
   Future<void> _loadFavorites() async {
-    _favorites = await _dbHelper.getFavorites();
+    final rawFavorites = await _dbHelper.getFavorites();
+    final validFavorites = <Song>[];
+    for (final song in rawFavorites) {
+      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        await _dbHelper.removeFavorite(song.id);
+      } else {
+        validFavorites.add(song);
+      }
+    }
+    _favorites = validFavorites;
     notifyListeners();
   }
 
   Future<void> _loadHistory() async {
-    _history = await _dbHelper.getHistory();
+    final rawHistory = await _dbHelper.getHistory();
+    final validHistory = <Song>[];
+    for (final song in rawHistory) {
+      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        await _dbHelper.removeFromHistory(song.id);
+      } else {
+        validHistory.add(song);
+      }
+    }
+    _history = validHistory;
     notifyListeners();
   }
 
@@ -171,7 +228,16 @@ class SongProvider with ChangeNotifier {
     final maps = await _dbHelper.getPlaylists();
     _playlists = maps.map((m) => Playlist.fromMap(m)).toList();
     for (var playlist in _playlists) {
-      playlist.songs = await _dbHelper.getSongsForPlaylist(playlist.id);
+      final rawSongs = await _dbHelper.getSongsForPlaylist(playlist.id);
+      final validSongs = <Song>[];
+      for (final song in rawSongs) {
+        if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+          await _dbHelper.removeSongFromPlaylist(playlist.id, song.id);
+        } else {
+          validSongs.add(song);
+        }
+      }
+      playlist.songs = validSongs;
     }
     notifyListeners();
   }
@@ -195,5 +261,70 @@ class SongProvider with ChangeNotifier {
   Future<void> removeSongFromPlaylist(int playlistId, String videoId) async {
     await _dbHelper.removeSongFromPlaylist(playlistId, videoId);
     await _loadPlaylists();
+  }
+
+  // ─── Local Music ───
+
+  /// เพิ่มโฟลเดอร์เพลงจากเครื่อง / USB Drive
+  Future<void> addLocalFolder() async {
+    _isScanning = true;
+    notifyListeners();
+
+    try {
+      final songs = await _localMusicService.pickFolderAndScan();
+      if (songs.isNotEmpty) {
+        // ลบเพลงซ้ำ (เช็คจาก filePath)
+        for (final song in songs) {
+          final exists = _localSongs.any((s) => s.filePath == song.filePath);
+          if (!exists) {
+            _localSongs.add(song);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding local folder: $e');
+      }
+    }
+
+    _isScanning = false;
+    notifyListeners();
+  }
+
+  /// เพิ่มไฟล์เพลงจากเครื่อง
+  Future<void> addLocalFiles() async {
+    _isScanning = true;
+    notifyListeners();
+
+    try {
+      final songs = await _localMusicService.pickFiles();
+      if (songs.isNotEmpty) {
+        for (final song in songs) {
+          final exists = _localSongs.any((s) => s.filePath == song.filePath);
+          if (!exists) {
+            _localSongs.add(song);
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error adding local files: $e');
+      }
+    }
+
+    _isScanning = false;
+    notifyListeners();
+  }
+
+  /// ลบเพลง local ออกจากรายการ
+  void removeLocalSong(Song song) {
+    _localSongs.removeWhere((s) => s.filePath == song.filePath);
+    notifyListeners();
+  }
+
+  /// ลบเพลง local ทั้งหมด
+  void clearLocalSongs() {
+    _localSongs.clear();
+    notifyListeners();
   }
 }

@@ -20,7 +20,7 @@ class DbHelper {
     String path = join(await getDatabasesPath(), 'yt_music.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -36,7 +36,9 @@ class DbHelper {
         artist TEXT,
         thumbnail TEXT,
         duration INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_local INTEGER DEFAULT 0,
+        file_path TEXT
       )
     ''');
 
@@ -49,7 +51,9 @@ class DbHelper {
         artist TEXT,
         thumbnail TEXT,
         duration INTEGER,
-        played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_local INTEGER DEFAULT 0,
+        file_path TEXT
       )
     ''');
 
@@ -59,6 +63,17 @@ class DbHelper {
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createPlaylistTables(db);
+    }
+    if (oldVersion < 3) {
+      // Add local music support columns to existing tables
+      await db.execute('ALTER TABLE favorites ADD COLUMN is_local INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE favorites ADD COLUMN file_path TEXT');
+      
+      await db.execute('ALTER TABLE history ADD COLUMN is_local INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE history ADD COLUMN file_path TEXT');
+      
+      await db.execute('ALTER TABLE playlist_songs ADD COLUMN is_local INTEGER DEFAULT 0');
+      await db.execute('ALTER TABLE playlist_songs ADD COLUMN file_path TEXT');
     }
   }
 
@@ -81,6 +96,8 @@ class DbHelper {
         thumbnail TEXT,
         duration INTEGER,
         added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_local INTEGER DEFAULT 0,
+        file_path TEXT,
         FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE
       )
     ''');
@@ -133,6 +150,15 @@ class DbHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('history', orderBy: 'played_at DESC', limit: 50);
     return List.generate(maps.length, (i) => Song.fromMap(maps[i]));
+  }
+
+  Future<int> removeFromHistory(String videoId) async {
+    final db = await database;
+    return await db.delete(
+      'history',
+      where: 'video_id = ?',
+      whereArgs: [videoId],
+    );
   }
 
   // ─── Playlists ───

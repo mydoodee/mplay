@@ -1,12 +1,18 @@
+import 'dart:typed_data';
+
 class Song {
   final String id;
   final String title;
   final String artist;
   final String thumbnail;
   final int duration;
+  final bool isLocal;
+  final String? filePath;
+  final Uint8List? coverArtBytes;
 
   // Always returns a valid YouTube thumbnail URL (16:9, for lists)
   String get thumbnailUrl {
+    if (isLocal) return '';
     if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
       return thumbnail;
     }
@@ -15,6 +21,7 @@ class Song {
 
   // High-quality thumbnail for player screen (hqdefault = 480×360)
   String get hqThumbnailUrl {
+    if (isLocal) return '';
     if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http') && !thumbnail.contains('ytimg.com')) {
       return thumbnail;
     }
@@ -23,11 +30,13 @@ class Song {
 
   // Standard-definition thumbnail (640×480)
   String get sdThumbnailUrl {
+    if (isLocal) return '';
     return 'https://i.ytimg.com/vi/$id/sddefault.jpg';
   }
 
   // Maximum resolution thumbnail (1280×720)
   String get maxResThumbnailUrl {
+    if (isLocal) return '';
     return 'https://i.ytimg.com/vi/$id/maxresdefault.jpg';
   }
 
@@ -37,6 +46,9 @@ class Song {
     required this.artist,
     required this.thumbnail,
     required this.duration,
+    this.isLocal = false,
+    this.filePath,
+    this.coverArtBytes,
   });
 
   factory Song.fromJson(Map<String, dynamic> json) {
@@ -67,6 +79,8 @@ class Song {
       'artist': artist,
       'thumbnail': thumbnail,
       'duration': duration,
+      'is_local': isLocal ? 1 : 0,
+      'file_path': filePath,
     };
   }
 
@@ -77,6 +91,30 @@ class Song {
       artist: map['artist'] ?? 'Unknown Artist',
       thumbnail: map['thumbnail'] ?? '',
       duration: map['duration'] ?? 0,
+      isLocal: (map['is_local'] == 1),
+      filePath: map['file_path'],
+    );
+  }
+
+  /// Create a Song from a local file path with metadata
+  factory Song.fromLocalFile({
+    required String filePath,
+    required String title,
+    String artist = 'Unknown Artist',
+    int duration = 0,
+    Uint8List? coverArtBytes,
+  }) {
+    // Use file path hash as a unique ID for local files
+    final id = 'local_${filePath.hashCode.abs()}';
+    return Song(
+      id: id,
+      title: title,
+      artist: artist,
+      thumbnail: '',
+      duration: duration,
+      isLocal: true,
+      filePath: filePath,
+      coverArtBytes: coverArtBytes,
     );
   }
 }

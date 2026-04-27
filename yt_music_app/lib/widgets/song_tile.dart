@@ -143,7 +143,6 @@ class SongTile extends StatelessWidget {
               ),
             _menuItem(ctx, Icons.share_rounded, 'แชร์', () {
               Navigator.pop(ctx);
-              // TODO: Share song
             }),
             _menuItem(ctx, Icons.info_outline_rounded, 'ข้อมูลเพลง', () {
               Navigator.pop(ctx);
@@ -241,166 +240,234 @@ class SongTile extends StatelessWidget {
     final titleSize = Responsive.songTitleFontSize(context);
     final artistSize = Responsive.songArtistFontSize(context);
 
-    return Material(
-      color: isPlaying ? const Color(0xFF1A1A1A) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        splashColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
-        highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.05),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 🖼 YouTube-style 16:9 Thumbnail with duration overlay
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: CachedNetworkImage(
-                      imageUrl: song.thumbnailUrl,
-                      width: thumbW,
-                      height: thumbH,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        width: thumbW,
-                        height: thumbH,
-                        color: const Color(0xFF1E1E1E),
-                        child: const Center(
-                          child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: Color(0xFFF15A24),
-                            ),
-                          ),
-                        ),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        width: thumbW,
-                        height: thumbH,
-                        color: const Color(0xFF1E1E1E),
-                        child: const Center(
-                          child: AppLogo(size: 22, showText: false),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // ⏱ Duration badge (bottom-right)
-                  Positioned(
-                    bottom: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text(
-                        durationText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // ❤️ Favorite indicator (top-left badge)
-                  if (isFavorite)
-                    Positioned(
-                      top: 4,
-                      left: 4,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.75),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Icon(
-                          Icons.favorite_rounded,
-                          size: 10,
-                          color: Color(0xFFFF4466),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-
-              const SizedBox(width: 10),
-
-              // 📝 Title, Artist & 3-dot menu
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Text info
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (isPlaying)
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 2, right: 6),
-                                  child: MiniEqualizer(
-                                    color: Color(0xFFF15A24),
-                                    size: 14,
-                                  ),
-                                ),
-                              Expanded(
-                                child: Text(
-                                  song.title,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: isPlaying ? const Color(0xFFF15A24) : Colors.white,
-                                    fontSize: titleSize,
-                                    fontWeight: isPlaying ? FontWeight.w700 : FontWeight.w500,
-                                    height: 1.3,
-                                  ),
+    final tileContent = InkWell(
+      onTap: onTap,
+      splashColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
+      highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.05),
+      borderRadius: isPlaying ? BorderRadius.circular(14) : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 🖼 YouTube-style 16:9 Thumbnail with duration overlay
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: song.isLocal
+                      ? (song.coverArtBytes != null
+                          ? Image.memory(
+                              song.coverArtBytes!,
+                              width: thumbW,
+                              height: thumbH,
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              width: thumbW,
+                              height: thumbH,
+                              color: const Color(0xFF1E1E1E),
+                              child: const Center(
+                                child: AppLogo(
+                                  size: 22,
+                                  showText: false,
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            song.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: const Color(0xFF888888),
-                              fontSize: artistSize,
-                              fontWeight: FontWeight.w400,
+                            ))
+                      : CachedNetworkImage(
+                          imageUrl: song.thumbnailUrl,
+                          width: thumbW,
+                          height: thumbH,
+                          fit: BoxFit.cover,
+                          placeholder: (_, _) => Container(
+                            width: thumbW,
+                            height: thumbH,
+                            color: const Color(0xFF1E1E1E),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: Color(0xFFF15A24),
+                                ),
+                              ),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-
-                    // ⋮ 3-dot menu button
-                    GestureDetector(
-                      onTap: () => _showSongMenu(context),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 4, top: 0),
-                        child: Icon(
-                          Icons.more_vert_rounded,
-                          color: const Color(0xFF888888),
-                          size: Responsive.isTablet(context) ? 24 : 20,
+                          errorWidget: (_, _, _) => Container(
+                            width: thumbW,
+                            height: thumbH,
+                            color: const Color(0xFF1E1E1E),
+                            child: const Center(
+                              child: AppLogo(size: 22, showText: false),
+                            ),
+                          ),
                         ),
+                ),
+                // ⏱ Duration badge (bottom-right)
+                Positioned(
+                  bottom: 4,
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      durationText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
                       ),
                     ),
-                  ],
+                  ),
                 ),
+                // ❤️ Favorite indicator (top-left badge)
+                if (isFavorite)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.75),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Icon(
+                        Icons.favorite_rounded,
+                        size: 10,
+                        color: Color(0xFFFF4466),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            const SizedBox(width: 10),
+
+            // 📝 Title, Artist & 3-dot menu
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Text info
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (isPlaying)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2, right: 6),
+                                child: MiniEqualizer(
+                                  color: Color(0xFFF15A24),
+                                  size: 14,
+                                ),
+                              ),
+                            Expanded(
+                              child: Text(
+                                song.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isPlaying
+                                      ? const Color(0xFFF15A24)
+                                      : Colors.white,
+                                  fontSize: titleSize,
+                                  fontWeight: isPlaying
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          song.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFF888888),
+                            fontSize: artistSize,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ⋮ 3-dot menu button
+                  GestureDetector(
+                    onTap: () => _showSongMenu(context),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4, top: 0),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        color: const Color(0xFF888888),
+                        size: Responsive.isTablet(context) ? 24 : 20,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!isPlaying) {
+      return Material(
+        color: Colors.transparent,
+        child: tileContent,
+      );
+    }
+
+    // 🔮 Glass gradient background for the playing song
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFFF15A24).withValues(alpha: 0.45), // orange glass
+              const Color(0xFFED1C24).withValues(alpha: 0.30), // red glass
+              const Color(0xFF9B1BE0).withValues(alpha: 0.20), // purple glass
             ],
+            stops: const [0.0, 0.5, 1.0],
+          ),
+          border: Border.all(
+            color: const Color(0xFFF15A24).withValues(alpha: 0.7),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFF15A24).withValues(alpha: 0.3),
+              blurRadius: 14,
+              spreadRadius: 0,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(13),
+          child: Material(
+            color: Colors.transparent,
+            child: tileContent,
           ),
         ),
       ),

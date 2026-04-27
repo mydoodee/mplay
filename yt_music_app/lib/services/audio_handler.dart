@@ -18,14 +18,16 @@ class MyAudioHandler extends BaseAudioHandler {
 
   MyAudioHandler() {
     _player = AudioPlayer(
-      audioPipeline: AudioPipeline(androidAudioEffects: [equalizer, loudnessEnhancer]),
+      audioPipeline: AudioPipeline(
+        androidAudioEffects: [equalizer, loudnessEnhancer],
+      ),
       audioLoadConfiguration: AudioLoadConfiguration(
         androidLoadControl: AndroidLoadControl(
-          minBufferDuration: const Duration(minutes: 5),   
-          maxBufferDuration: const Duration(minutes: 10),    
-          bufferForPlaybackDuration: const Duration(seconds: 2), 
-          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3), 
-          targetBufferBytes: 1024 * 1024 * 50, 
+          minBufferDuration: const Duration(minutes: 5),
+          maxBufferDuration: const Duration(minutes: 10),
+          bufferForPlaybackDuration: const Duration(seconds: 2),
+          bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 3),
+          targetBufferBytes: 1024 * 1024 * 50,
         ),
         darwinLoadControl: DarwinLoadControl(
           preferredForwardBufferDuration: const Duration(minutes: 5),
@@ -36,8 +38,6 @@ class MyAudioHandler extends BaseAudioHandler {
     _init();
   }
 
-
-
   Future<void> _init() async {
     await _player.setAudioSource(_playlist);
     _player.playbackEventStream.listen(_broadcastState);
@@ -45,10 +45,12 @@ class MyAudioHandler extends BaseAudioHandler {
     // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 4 frame/วิ)
     _positionTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (_player.playing) {
-        playbackState.add(playbackState.value.copyWith(
-          updatePosition: _player.position,
-          bufferedPosition: _player.bufferedPosition,
-        ));
+        playbackState.add(
+          playbackState.value.copyWith(
+            updatePosition: _player.position,
+            bufferedPosition: _player.bufferedPosition,
+          ),
+        );
       }
     });
 
@@ -67,6 +69,8 @@ class MyAudioHandler extends BaseAudioHandler {
       int nextIndex = currentIndex + offset;
       if (nextIndex < queue.value.length) {
         final songId = queue.value[nextIndex].id;
+        // ข้ามเพลง local — ไม่ต้อง pre-cache
+        if (songId.startsWith('local_')) continue;
         try {
           await ApiService().getAudioUrl(songId);
         } catch (_) {}
@@ -78,7 +82,6 @@ class MyAudioHandler extends BaseAudioHandler {
   // ระบบเล่นเพลง & โหลดคิว
   // =============================================
 
-  @override
   Future<void> playSong(Song song) async {
     final item = _songToMediaItem(song);
     int existingIndex = queue.value.indexWhere((i) => i.id == song.id);
@@ -96,23 +99,27 @@ class MyAudioHandler extends BaseAudioHandler {
       currentQueue.add(item);
       queue.add(currentQueue);
 
-      final source = AudioSource.uri(
-        Uri.parse(ApiConfig.streamUrl(song.id)),
-        tag: item,
-        headers: {'User-Agent': 'Mozilla/5.0'}
-      );
+      final AudioSource source;
+      if (song.isLocal && song.filePath != null) {
+        // 🎵 เล่นไฟล์จากเครื่อง
+        source = AudioSource.file(song.filePath!, tag: item);
+      } else {
+        // 🌐 เล่นจาก YouTube stream
+        source = AudioSource.uri(
+          Uri.parse(ApiConfig.streamUrl(song.id)),
+          tag: item,
+          headers: {'User-Agent': 'Mozilla/5.0'},
+        );
+        // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
+        ApiService().getAudioUrl(song.id).catchError((_) => null);
+      }
 
       await _playlist.add(source);
-
-      // รีบแคชลิงก์เพลงแรกแบบเบื้องหลัง (ไม่หน่วง UI)
-      ApiService().getAudioUrl(song.id).catchError((_) => null);
-
       await _player.seek(Duration.zero, index: currentQueue.length - 1);
       _player.play();
     }
   }
 
-  @override
   Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
     if (songs.isEmpty) return;
 
@@ -120,19 +127,27 @@ class MyAudioHandler extends BaseAudioHandler {
     queue.add(items);
 
     if (initialIndex >= 0 && initialIndex < items.length) {
-       // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที" 
-       mediaItem.add(items[initialIndex]);
-       
-       // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (ไม่ต้องบล็อก UI)
-       ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+      // 🚀 อัพเดท UI ให้โชว์หน้าต่างเล่นเพลงเด้งขึ้นมา "ทันที"
+      mediaItem.add(items[initialIndex]);
+
+      // รีบแคชลิงก์เพลงแรกด่วนแบบเบื้องหลัง (เฉพาะ YouTube)
+      if (!songs[initialIndex].isLocal) {
+        ApiService().getAudioUrl(songs[initialIndex].id).catchError((_) => null);
+      }
     }
 
     final sources = songs.map((s) {
-      return AudioSource.uri(
-        Uri.parse(ApiConfig.streamUrl(s.id)),
-        tag: _songToMediaItem(s),
-        headers: {'User-Agent': 'Mozilla/5.0'}
-      );
+      if (s.isLocal && s.filePath != null) {
+        // 🎵 ไฟล์จากเครื่อง
+        return AudioSource.file(s.filePath!, tag: _songToMediaItem(s));
+      } else {
+        // 🌐 YouTube stream
+        return AudioSource.uri(
+          Uri.parse(ApiConfig.streamUrl(s.id)),
+          tag: _songToMediaItem(s),
+          headers: {'User-Agent': 'Mozilla/5.0'},
+        );
+      }
     }).toList();
 
     await _playlist.clear();
@@ -152,7 +167,7 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> skipToNext() async {
     final nextIndex = (_player.currentIndex ?? 0) + 1;
     if (nextIndex < queue.value.length) {
-       mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
+      mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
     }
     await _player.seekToNext();
   }
@@ -164,7 +179,7 @@ class MyAudioHandler extends BaseAudioHandler {
     } else {
       final prevIndex = (_player.currentIndex ?? 0) - 1;
       if (prevIndex >= 0) {
-         mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
+        mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
       }
       await _player.seekToPrevious();
     }
@@ -220,47 +235,59 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   MediaItem _songToMediaItem(Song song) {
+    Uri? artUri;
+    if (song.isLocal) {
+      // Local file — ตั้งเป็น null เพื่อป้องกัน Android SystemUI crash จาก dummy URI
+      artUri = null;
+    } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
+      artUri = Uri.parse(song.thumbnail);
+    }
+
     return MediaItem(
       id: song.id,
-      album: 'YouTube Music',
+      album: song.isLocal ? 'Local Music' : 'YouTube Music',
       title: song.title,
       artist: song.artist,
-      artUri: (song.thumbnail.isNotEmpty && song.thumbnail != "NA") 
-          ? Uri.parse(song.thumbnail) 
-          : null,
+      artUri: artUri,
       duration: Duration(seconds: song.duration),
+      extras: {
+        'isLocal': song.isLocal,
+        'filePath': song.filePath,
+      },
     );
   }
 
   void _broadcastState(PlaybackEvent event) {
     final playing = _player.playing;
-    playbackState.add(playbackState.value.copyWith(
-      controls: [
-        MediaControl.skipToPrevious,
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {
-        MediaAction.seek,
-        MediaAction.seekForward,
-        MediaAction.seekBackward,
-        MediaAction.setRepeatMode,
-        MediaAction.setShuffleMode,
-      },
-      androidCompactActionIndices: const [0, 1, 3],
-      processingState: const {
-        ProcessingState.idle: AudioProcessingState.idle,
-        ProcessingState.loading: AudioProcessingState.loading,
-        ProcessingState.buffering: AudioProcessingState.buffering,
-        ProcessingState.ready: AudioProcessingState.ready,
-        ProcessingState.completed: AudioProcessingState.completed,
-      }[_player.processingState]!,
-      playing: playing,
-      updatePosition: _player.position,
-      bufferedPosition: _player.bufferedPosition,
-      speed: _player.speed,
-      queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
-    ));
+    playbackState.add(
+      playbackState.value.copyWith(
+        controls: [
+          MediaControl.skipToPrevious,
+          if (playing) MediaControl.pause else MediaControl.play,
+          MediaControl.stop,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {
+          MediaAction.seek,
+          MediaAction.seekForward,
+          MediaAction.seekBackward,
+          MediaAction.setRepeatMode,
+          MediaAction.setShuffleMode,
+        },
+        androidCompactActionIndices: const [0, 1, 3],
+        processingState: const {
+          ProcessingState.idle: AudioProcessingState.idle,
+          ProcessingState.loading: AudioProcessingState.loading,
+          ProcessingState.buffering: AudioProcessingState.buffering,
+          ProcessingState.ready: AudioProcessingState.ready,
+          ProcessingState.completed: AudioProcessingState.completed,
+        }[_player.processingState]!,
+        playing: playing,
+        updatePosition: _player.position,
+        bufferedPosition: _player.bufferedPosition,
+        speed: _player.speed,
+        queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
+      ),
+    );
   }
 }
