@@ -571,19 +571,89 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Padding(
                 padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
                 child: Row(
-                  children: const [
-                    Icon(
+                  children: [
+                    const Icon(
                       Icons.history_rounded,
                       color: Color(0xFFF15A24),
                       size: 20,
                     ),
-                    SizedBox(width: 8),
-                    Text(
-                      'เล่นล่าสุด',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'เล่นล่าสุด',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    // ปุ่มลบประวัติทั้งหมด
+                    GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF1A1A1A),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            title: const Text(
+                              'ลบประวัติการเล่น',
+                              style: TextStyle(color: Colors.white, fontSize: 16),
+                            ),
+                            content: const Text(
+                              'ต้องการลบประวัติการเล่นเพลงทั้งหมดหรือไม่?',
+                              style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text(
+                                  'ยกเลิก',
+                                  style: TextStyle(color: Color(0xFF888888)),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  songProvider.clearHistory();
+                                },
+                                child: const Text(
+                                  'ลบทั้งหมด',
+                                  style: TextStyle(color: Color(0xFFFF4466)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E1E),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF333333)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.delete_outline_rounded,
+                              color: Color(0xFF888888),
+                              size: 16,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'ลบประวัติ',
+                              style: TextStyle(
+                                color: Color(0xFF888888),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -603,29 +673,39 @@ class _HomeScreenState extends State<HomeScreen> {
             );
             final isCurrent = currentSong?.id == song.id;
 
-            if (isCurrent) {
-              return _buildActivePlayingCard(
-                songProvider,
-                song,
-                queue: songProvider.history,
-                index: index,
-              );
-            }
-
             return Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxW),
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: hPad),
-                  child: SongTile(
-                    song: song,
-                    isPlaying: false,
-                    isFavorite: isFavorite,
-                    onFavoritePressed: () => songProvider.toggleFavorite(song),
-                    onTap: () => songProvider.playSong(
-                      song,
-                      queue: songProvider.history,
-                      index: index,
+                  child: Dismissible(
+                    key: Key('history_${song.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF4466).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.delete_rounded,
+                        color: Color(0xFFFF4466),
+                        size: 22,
+                      ),
+                    ),
+                    onDismissed: (_) => songProvider.removeFromHistory(song),
+                    child: SongTile(
+                      song: song,
+                      isPlaying: isCurrent,
+                      isFavorite: isFavorite,
+                      onFavoritePressed: () => songProvider.toggleFavorite(song),
+                      onTap: () => songProvider.playSong(
+                        song,
+                        queue: songProvider.history,
+                        index: index,
+                      ),
                     ),
                   ),
                 ),
@@ -647,15 +727,6 @@ class _HomeScreenState extends State<HomeScreen> {
             );
             final isCurrent = currentSong?.id == song.id;
 
-            if (isCurrent) {
-              return _buildActivePlayingCard(
-                songProvider,
-                song,
-                queue: results,
-                index: index,
-              );
-            }
-
             return Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxW),
@@ -663,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   child: SongTile(
                     song: song,
-                    isPlaying: false,
+                    isPlaying: isCurrent,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
@@ -1139,25 +1210,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 onDismissed: (_) => songProvider.removeLocalSong(song),
-                child: isCurrent
-                    ? _buildActivePlayingCard(
-                        songProvider,
-                        song,
-                        queue: localSongs,
-                        index: index,
-                      )
-                    : SongTile(
-                        song: song,
-                        isPlaying: false,
-                        isFavorite: isFavorite,
-                        onFavoritePressed: () =>
-                            songProvider.toggleFavorite(song),
-                        onTap: () => songProvider.playSong(
-                          song,
-                          queue: localSongs,
-                          index: index,
-                        ),
-                      ),
+                child: SongTile(
+                  song: song,
+                  isPlaying: isCurrent,
+                  isFavorite: isFavorite,
+                  onFavoritePressed: () =>
+                      songProvider.toggleFavorite(song),
+                  onTap: () => songProvider.playSong(
+                    song,
+                    queue: localSongs,
+                    index: index,
+                  ),
+                ),
               );
             },
           ),

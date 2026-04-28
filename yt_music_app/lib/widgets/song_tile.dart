@@ -434,41 +434,38 @@ class SongTile extends StatelessWidget {
       );
     }
 
-    // 🔮 Glass gradient background for the playing song
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFFF15A24).withValues(alpha: 0.45), // orange glass
-              const Color(0xFFED1C24).withValues(alpha: 0.30), // red glass
-              const Color(0xFF9B1BE0).withValues(alpha: 0.20), // purple glass
-            ],
-            stops: const [0.0, 0.5, 1.0],
-          ),
-          border: Border.all(
-            color: const Color(0xFFF15A24).withValues(alpha: 0.7),
-            width: 1.0,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFF15A24).withValues(alpha: 0.3),
-              blurRadius: 14,
-              spreadRadius: 0,
-              offset: const Offset(0, 2),
-            ),
+    // 🔮 Glass gradient background for the playing song — same height as normal
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFF15A24).withValues(alpha: 0.45),
+            const Color(0xFFED1C24).withValues(alpha: 0.30),
+            const Color(0xFF9B1BE0).withValues(alpha: 0.20),
           ],
+          stops: const [0.0, 0.5, 1.0],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: Material(
-            color: Colors.transparent,
-            child: tileContent,
+        border: Border.all(
+          color: const Color(0xFFF15A24).withValues(alpha: 0.7),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF15A24).withValues(alpha: 0.3),
+            blurRadius: 14,
+            spreadRadius: 0,
+            offset: const Offset(0, 2),
           ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(13),
+        child: Material(
+          color: Colors.transparent,
+          child: tileContent,
         ),
       ),
     );

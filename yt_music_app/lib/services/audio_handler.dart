@@ -27,14 +27,13 @@ class MyAudioHandler extends BaseAudioHandler {
         androidLoadControl: AndroidLoadControl(
           minBufferDuration: const Duration(minutes: 1),
           maxBufferDuration: const Duration(minutes: 5),
-          // 🚀 ปรับเป็น 1s เพื่อความเสถียร (ถ้าเน็ตแกว่ง 200ms จะไม่พอและเกิด Timeout)
           bufferForPlaybackDuration: const Duration(seconds: 1),
           bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 2),
           targetBufferBytes: 1024 * 1024 * 30, // 30MB
         ),
         darwinLoadControl: DarwinLoadControl(
           preferredForwardBufferDuration: const Duration(minutes: 3),
-          automaticallyWaitsToMinimizeStalling: false, // 🚀 เล่นเร็ว ไม่รอ network
+          automaticallyWaitsToMinimizeStalling: false,
         ),
       ),
     );
@@ -44,6 +43,35 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> _init() async {
     await _player.setAudioSource(_playlist);
     _player.playbackEventStream.listen(_broadcastState);
+
+    // Sync shuffle mode changes -> update UI button state
+    _player.shuffleModeEnabledStream.listen((enabled) {
+      playbackState.add(
+        playbackState.value.copyWith(
+          shuffleMode: enabled
+              ? AudioServiceShuffleMode.all
+              : AudioServiceShuffleMode.none,
+        ),
+      );
+    });
+
+    // Sync loop/repeat mode changes -> update UI button state
+    _player.loopModeStream.listen((mode) {
+      AudioServiceRepeatMode repeatMode;
+      switch (mode) {
+        case LoopMode.one:
+          repeatMode = AudioServiceRepeatMode.one;
+          break;
+        case LoopMode.all:
+          repeatMode = AudioServiceRepeatMode.all;
+          break;
+        default:
+          repeatMode = AudioServiceRepeatMode.none;
+      }
+      playbackState.add(
+        playbackState.value.copyWith(repeatMode: repeatMode),
+      );
+    });
 
     // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 4 frame/วิ)
     _positionTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
