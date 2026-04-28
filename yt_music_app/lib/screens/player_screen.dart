@@ -219,53 +219,37 @@ class PlayerScreen extends StatelessWidget {
     final isTablet = Responsive.isTablet(context);
     final isLandscape = Responsive.usePlayerLandscapeLayout(context);
 
-    return Hero(
-      tag: 'album_art_${currentSong.id}',
-      child: Container(
-        width: isLandscape ? null : double.infinity,
-        decoration: BoxDecoration(
-          borderRadius: isTablet && !isLandscape
-              ? BorderRadius.zero
-              : BorderRadius.circular(isTablet ? 20 : 16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.6),
-              blurRadius: 40,
-              spreadRadius: 8,
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: isTablet && !isLandscape
-              ? BorderRadius.zero
-              : BorderRadius.circular(isTablet ? 20 : 16),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: currentSong.isLocal
-                ? (currentSong.coverArtBytes != null
-                    ? Image.memory(
-                        currentSong.coverArtBytes!,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        color: const Color(0xFF1A1A1A),
-                        child: const Center(
-                          child: AppLogo(
-                            size: 60,
-                            showText: false,
-                          ),
-                        ),
-                      ))
-                : CachedNetworkImage(
-                    imageUrl: currentSong.maxResThumbnailUrl,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => CachedNetworkImage(
-                      imageUrl: currentSong.sdThumbnailUrl,
-                      fit: BoxFit.cover,
-                      errorWidget: (context, url, secondError) => CachedNetworkImage(
-                        imageUrl: currentSong.hqThumbnailUrl,
-                        fit: BoxFit.cover,
-                        errorWidget: (context, url, thirdError) => Container(
+    // กำหนด padding รอบรูป
+    final double hPad = isLandscape ? 0 : (isTablet ? 40 : 24);
+    final double radius = isTablet ? 20.0 : 14.0;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: hPad),
+      child: Hero(
+        tag: 'album_art_${currentSong.id}',
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.55),
+                blurRadius: 36,
+                spreadRadius: 4,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(radius),
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: currentSong.isLocal
+                  ? (currentSong.coverArtBytes != null
+                      ? Image.memory(
+                          currentSong.coverArtBytes!,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
                           color: const Color(0xFF1A1A1A),
                           child: const Center(
                             child: AppLogo(
@@ -273,19 +257,38 @@ class PlayerScreen extends StatelessWidget {
                               showText: false,
                             ),
                           ),
+                        ))
+                  : CachedNetworkImage(
+                      imageUrl: currentSong.maxResThumbnailUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (context, url, error) => CachedNetworkImage(
+                        imageUrl: currentSong.sdThumbnailUrl,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, secondError) => CachedNetworkImage(
+                          imageUrl: currentSong.hqThumbnailUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: (context, url, thirdError) => Container(
+                            color: const Color(0xFF1A1A1A),
+                            child: const Center(
+                              child: AppLogo(
+                                size: 60,
+                                showText: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      placeholder: (_, _) => Container(
+                        color: const Color(0xFF1A1A1A),
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFFF15A24),
+                            strokeWidth: 2,
+                          ),
                         ),
                       ),
                     ),
-                    placeholder: (_, _) => Container(
-                      color: const Color(0xFF1A1A1A),
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFFF15A24),
-                          strokeWidth: 2,
-                        ),
-                      ),
-                    ),
-                  ),
+            ),
           ),
         ),
       ),

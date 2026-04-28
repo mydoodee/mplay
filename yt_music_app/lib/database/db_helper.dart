@@ -20,7 +20,7 @@ class DbHelper {
     String path = join(await getDatabasesPath(), 'yt_music.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -58,6 +58,7 @@ class DbHelper {
     ''');
 
     await _createPlaylistTables(db);
+    await _createLocalSongsTable(db);
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -74,6 +75,9 @@ class DbHelper {
       
       await db.execute('ALTER TABLE playlist_songs ADD COLUMN is_local INTEGER DEFAULT 0');
       await db.execute('ALTER TABLE playlist_songs ADD COLUMN file_path TEXT');
+    }
+    if (oldVersion < 4) {
+      await _createLocalSongsTable(db);
     }
   }
 
@@ -161,6 +165,11 @@ class DbHelper {
     );
   }
 
+  Future<int> clearHistory() async {
+    final db = await database;
+    return await db.delete('history');
+  }
+
   // ─── Playlists ───
   Future<int> createPlaylist(String name) async {
     final db = await database;
@@ -204,5 +213,56 @@ class DbHelper {
       orderBy: 'added_at DESC',
     );
     return List.generate(maps.length, (i) => Song.fromMap(maps[i]));
+  }
+
+  // ─── Local Songs (Persistent) ───
+
+  Future _createLocalSongsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS local_songs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        video_id TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        artist TEXT,
+        thumbnail TEXT,
+        duration INTEGER,
+        is_local INTEGER DEFAULT 1,
+        file_path TEXT NOT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+  }
+
+  Future<int> addLocalSong(Song song) async {
+    final db = await database;
+    final map = song.toMap();
+    return await db.insert(
+      'local_songs',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Song>> getLocalSongs() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'local_songs',
+      orderBy: 'added_at DESC',
+    );
+    return List.generate(maps.length, (i) => Song.fromMap(maps[i]));
+  }
+
+  Future<int> removeLocalSong(String videoId) async {
+    final db = await database;
+    return await db.delete(
+      'local_songs',
+      where: 'video_id = ?',
+      whereArgs: [videoId],
+    );
+  }
+
+  Future<int> clearLocalSongs() async {
+    final db = await database;
+    return await db.delete('local_songs');
   }
 }

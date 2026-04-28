@@ -56,6 +56,7 @@ class SongProvider with ChangeNotifier {
       _loadFavorites();
       _loadPlaylists();
       _loadHistory();
+      _loadLocalSongs();
       _initAudioListener();
     });
   }
@@ -206,11 +207,35 @@ class SongProvider with ChangeNotifier {
       if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
         await _dbHelper.removeFromHistory(song.id);
       } else {
-        validHistory.add(song);
+        // ถ้าเป็นไฟล์ local ให้โหลด cover art จากไฟล์
+        validHistory.add(await _withCoverArt(song));
       }
     }
     _history = validHistory;
     notifyListeners();
+  }
+
+  /// โหลด coverArtBytes จากไฟล์ถ้าเป็นเพลง local
+  Future<Song> _withCoverArt(Song song) async {
+    if (!song.isLocal || song.filePath == null || song.coverArtBytes != null) {
+      return song;
+    }
+    try {
+      final bytes = await _localMusicService.extractCoverArt(song.filePath!);
+      if (bytes != null && bytes.isNotEmpty) {
+        return Song(
+          id: song.id,
+          title: song.title,
+          artist: song.artist,
+          thumbnail: song.thumbnail,
+          duration: song.duration,
+          isLocal: song.isLocal,
+          filePath: song.filePath,
+          coverArtBytes: bytes,
+        );
+      }
+    } catch (_) {}
+    return song;
   }
 
   Future<void> toggleFavorite(Song song) async {
@@ -283,6 +308,7 @@ class SongProvider with ChangeNotifier {
           final exists = _localSongs.any((s) => s.filePath == song.filePath);
           if (!exists) {
             _localSongs.add(song);
+            await _dbHelper.addLocalSong(song);
           }
         }
       }
@@ -308,6 +334,7 @@ class SongProvider with ChangeNotifier {
           final exists = _localSongs.any((s) => s.filePath == song.filePath);
           if (!exists) {
             _localSongs.add(song);
+            await _dbHelper.addLocalSong(song);
           }
         }
       }
@@ -324,12 +351,38 @@ class SongProvider with ChangeNotifier {
   /// ลบเพลง local ออกจากรายการ
   void removeLocalSong(Song song) {
     _localSongs.removeWhere((s) => s.filePath == song.filePath);
+    _dbHelper.removeLocalSong(song.id);
     notifyListeners();
   }
 
   /// ลบเพลง local ทั้งหมด
   void clearLocalSongs() {
     _localSongs.clear();
+    _dbHelper.clearLocalSongs();
+    notifyListeners();
+  }
+
+  /// โหลดเพลง local จาก DB พร้อม cover art
+  Future<void> _loadLocalSongs() async {
+    final songs = await _dbHelper.getLocalSongs();
+    _localSongs.clear();
+    for (final song in songs) {
+      _localSongs.add(await _withCoverArt(song));
+    }
+    notifyListeners();
+  }
+
+  /// ลบประวัติการเล่นเพลงทั้งหมด
+  Future<void> clearHistory() async {
+    await _dbHelper.clearHistory();
+    _history.clear();
+    notifyListeners();
+  }
+
+  /// ลบเพลงออกจากประวัติ
+  Future<void> removeFromHistory(Song song) async {
+    await _dbHelper.removeFromHistory(song.id);
+    _history.removeWhere((s) => s.id == song.id);
     notifyListeners();
   }
 }
