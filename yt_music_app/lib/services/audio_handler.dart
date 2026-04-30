@@ -253,6 +253,9 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
     if (songs.isEmpty) return;
 
+    // สร้าง copy ป้องกัน RangeError กรณี list ต้นทางถูกแก้ไขระหว่าง await
+    songs = List<Song>.from(songs);
+
     final items = songs.map(_songToMediaItem).toList();
     queue.add(items);
 

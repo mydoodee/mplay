@@ -600,11 +600,17 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             title: const Text(
                               'ลบประวัติการเล่น',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                              ),
                             ),
                             content: const Text(
                               'ต้องการลบประวัติการเล่นเพลงทั้งหมดหรือไม่?',
-                              style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
+                              style: TextStyle(
+                                color: Color(0xFFAAAAAA),
+                                fontSize: 14,
+                              ),
                             ),
                             actions: [
                               TextButton(
@@ -629,7 +635,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E1E1E),
                           borderRadius: BorderRadius.circular(20),
@@ -700,7 +709,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       song: song,
                       isPlaying: isCurrent,
                       isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
+                      onFavoritePressed: () =>
+                          songProvider.toggleFavorite(song),
                       onTap: () => songProvider.playSong(
                         song,
                         queue: songProvider.history,
@@ -819,7 +829,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: EdgeInsets.only(bottom: 4),
               child: Icon(Icons.home_filled, size: 22),
             ),
-            label: 'หน้าแรก',
+            label: 'เพลง',
           ),
           BottomNavigationBarItem(
             icon: Padding(
@@ -892,13 +902,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   errorWidget: (context, url, error) => CachedNetworkImage(
                     imageUrl: playlist.songs[0].hqThumbnailUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, err) =>
-                        Container(
-                          color: const Color(0xFF1A1A1A),
-                          child: const Center(
-                            child: AppLogo(size: 40, showText: false),
-                          ),
-                        ),
+                    errorWidget: (context, url, err) => Container(
+                      color: const Color(0xFF1A1A1A),
+                      child: const Center(
+                        child: AppLogo(size: 40, showText: false),
+                      ),
+                    ),
                   ),
                 ),
               if (playlist.songs.isEmpty)
@@ -989,9 +998,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.1,
-                        shadows: [
-                          Shadow(color: Colors.black, blurRadius: 6),
-                        ],
+                        shadows: [Shadow(color: Colors.black, blurRadius: 6)],
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1214,8 +1221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   song: song,
                   isPlaying: isCurrent,
                   isFavorite: isFavorite,
-                  onFavoritePressed: () =>
-                      songProvider.toggleFavorite(song),
+                  onFavoritePressed: () => songProvider.toggleFavorite(song),
                   onTap: () => songProvider.playSong(
                     song,
                     queue: localSongs,

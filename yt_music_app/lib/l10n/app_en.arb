@@ -1,0 +1,188 @@
+{
+  "@@locale": "en",
+
+  "tabMusic": "Music",
+  "tabExplore": "Explore",
+  "tabLocalFiles": "Local Files",
+  "tabLibrary": "Library",
+
+  "searchHint": "Search songs, artists, or paste YouTube link",
+  "searching": "Searching...",
+  "searchSongsArtistsOrLink": "Type song name, artist, or paste YouTube link",
+  "findSongsYouLike": "Find songs you like",
+
+  "recentlyPlayed": "Recently Played",
+  "clearHistory": "Clear",
+  "clearHistoryTitle": "Clear Play History",
+  "clearHistoryMessage": "Do you want to clear all play history?",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "clear": "Clear",
+  "close": "Close",
+  "create": "Create",
+
+  "yourLibrary": "Your Library",
+  "favorites": "Favorites",
+  "favoriteSongs": "Favorite Songs",
+  "noFavorites": "No favorite songs yet",
+  "songCount": "{count} songs",
+  "@songCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "playAll": "Play All",
+  "shufflePlay": "Shuffle",
+  "allSongs": "All Songs",
+
+  "noSongPlaying": "No song is currently playing",
+  "upNext": "Up Next",
+  "currentQueue": "Current Queue",
+  "noSongsInQueue": "No songs in queue",
+  "lyrics": "Lyrics",
+  "lyricsComingSoon": "Lyrics feature coming soon",
+
+  "addToPlaylist": "Add to Playlist",
+  "createNewPlaylist": "Create New Playlist",
+  "playlistNameHint": "Playlist name",
+  "noPlaylists": "No playlists yet",
+  "addedToPlaylist": "Added to \"{name}\"",
+  "@addedToPlaylist": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "createdAndAdded": "Created and added to \"{name}\"",
+  "@createdAndAdded": {
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "playlistSongCount": "{count} songs in list • Created for you",
+  "@playlistSongCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "noSongsInPlaylist": "No songs in this playlist yet",
+  "deletePlaylist": "Delete Playlist",
+  "deletePlaylistMessage": "Are you sure you want to delete this playlist? Songs in it will be removed from the playlist.",
+
+  "playSong": "Play this song",
+  "removeFavorite": "Remove from favorites",
+  "addFavorite": "Add to favorites",
+  "removeFromPlaylist": "Remove from playlist",
+  "share": "Share",
+  "shareSong": "Share this song",
+  "songInfo": "Song Info",
+  "songTitle": "Song Title",
+  "artist": "Artist",
+  "duration": "Duration",
+
+  "eqTitle": "Sound Settings",
+  "eqBassBoost": "Bass Boost",
+  "eqPresetNormal": "Normal",
+  "eqPresetPop": "Pop",
+  "eqPresetClassic": "Classic",
+  "eqPresetJazz": "Jazz",
+  "eqPresetRock": "Rock",
+  "eqPresetCustom": "Custom",
+  "eqBandSubBass": "Sub Bass",
+  "eqBandBass": "Bass",
+  "eqBandLowMid": "Low Mid",
+  "eqBandMid": "Mid",
+  "eqBandHighMid": "High Mid",
+  "eqBandTreble": "Treble",
+  "eqBandBrilliance": "Brilliance",
+
+  "updateAvailable": "Update Available!",
+  "version": "Version {version}",
+  "@version": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "updateDetails": "Update Details:",
+  "defaultReleaseNotes": "• Performance improvements and bug fixes",
+  "later": "Later",
+  "download": "Download",
+  "downloading": "Downloading...",
+  "downloadProgress": "Download {received} MB / {total} MB",
+  "@downloadProgress": {
+    "placeholders": {
+      "received": {"type": "String"},
+      "total": {"type": "String"}
+    }
+  },
+  "downloadFailed": "Download failed. Please try again",
+  "openingInstaller": "Opening installer...",
+  "installPermissionRequired": "Please allow \"Install unknown apps\" in settings to continue",
+  "installFailed": "Cannot open installer. Please check permissions for installing apps from unknown sources",
+
+  "voiceNoSound": "No sound detected: {error}",
+  "@voiceNoSound": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "voiceMicUnavailable": "Microphone is not available",
+  "voiceListening": "Listening...",
+
+  "adminSystemUsers": "System Users",
+  "adminOnlineCount": "Online: {count} users",
+  "@adminOnlineCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "adminNoUsers": "No users at this time",
+  "adminUsageTime": "Used: {time}",
+  "@adminUsageTime": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "adminHoursMinutes": "{hours} hours {minutes} minutes",
+  "@adminHoursMinutes": {
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminMinutes": "{minutes} minutes",
+  "@adminMinutes": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminLoginInvalid": "Invalid username or password",
+  "adminLogin": "Login",
+
+  "splashTagline": "Every mood, listen anywhere",
+  "splashLoading": "Loading...",
+  "cannotLoadChangelog": "Cannot load Changelog",
+
+  "localMusic": "Local Music",
+  "addFolder": "Add Folder",
+  "addFiles": "Add Files",
+  "scanningFiles": "Scanning files...",
+  "localSongsCount": "{count} songs from device",
+  "@localSongsCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "noLocalSongs": "No local songs added yet",
+  "tapToAddLocalSongs": "Tap 'Add Folder' or 'Add Files' to add songs",
+  "removeSong": "Remove Song",
+  "clearAll": "Clear All",
+
+  "changelog": "Changelog",
+  "appVersion": "v{version}",
+  "@appVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  }
+}

@@ -128,24 +128,30 @@ class SongProvider with ChangeNotifier {
     _isFetchingMore = true;
     notifyListeners();
 
-    final currentOffset = _searchResults.length;
-    final moreResults = await _apiService.searchSongs(
-      _currentSearchQuery,
-      limit: _pageSize,
-      offset: currentOffset,
-    );
+    try {
+      final currentOffset = _searchResults.length;
+      final moreResults = await _apiService.searchSongs(
+        _currentSearchQuery,
+        limit: _pageSize,
+        offset: currentOffset,
+      );
 
-    if (moreResults.isEmpty) {
-      _hasMoreResults = false;
-    } else {
-      _searchResults.addAll(moreResults);
-      if (moreResults.length < _pageSize) {
+      if (moreResults.isEmpty) {
         _hasMoreResults = false;
+      } else {
+        _searchResults.addAll(moreResults);
+        if (moreResults.length < _pageSize) {
+          _hasMoreResults = false;
+        }
       }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in searchMore: $e');
+      }
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
     }
-
-    _isFetchingMore = false;
-    notifyListeners();
   }
 
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
@@ -156,8 +162,13 @@ class SongProvider with ChangeNotifier {
         await audioHandler?.playSong(song);
       }
       
-      // 🚀 ทำงานเบื้องหลัง ไม่ต้องรอ (Non-blocking)
-      _dbHelper.addToHistory(song).then((_) => _loadHistory());
+      // 🚀 อัพเดท history ใน memory แบบเงียบๆ (ไม่ notifyListeners ทันที)
+      // เพื่อไม่ให้ list rebuild แล้วเด้งไปตำแหน่งแรก
+      _history.removeWhere((s) => s.id == song.id);
+      _history.insert(0, song);
+
+      // บันทึกลง DB เบื้องหลัง ไม่ต้อง reload ทั้งหมด
+      _dbHelper.addToHistory(song);
     } catch (e) {
       if (kDebugMode) {
         print('DB/Audio Error in playSong: $e');
