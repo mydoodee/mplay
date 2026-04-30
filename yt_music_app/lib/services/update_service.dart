@@ -46,12 +46,19 @@ class UpdateService {
             : response.data;
 
         final updateInfo = AppUpdateInfo.fromJson(data);
-
+        // Retrieve current build number
         final packageInfo = await PackageInfo.fromPlatform();
         final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
-
+        // Debug log for version comparison
+        if (kDebugMode) {
+          print('Update check: fetched build ${updateInfo.buildNumber}, current build $currentBuild');
+        }
         if (updateInfo.buildNumber > currentBuild) {
           return updateInfo;
+        } else {
+          if (kDebugMode) {
+            print('No update needed. Current build $currentBuild >= fetched ${updateInfo.buildNumber}');
+          }
         }
       }
     } catch (e) {
@@ -76,12 +83,35 @@ class UpdateService {
     return true;
   }
 
+  // Request permission to write to external storage (needed for downloading APK)
+  static Future<bool> requestWritePermission() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.storage.status;
+      if (!status.isGranted) {
+        final result = await Permission.storage.request();
+        if (!result.isGranted) {
+          if (kDebugMode) print('WRITE_EXTERNAL_STORAGE denied by user');
+          return false;
+        }
+      }
+      return true;
+    }
+    return true;
+  }
+
   /// ดาวน์โหลด APK ลง Internal Documents Directory (ใช้กับ FileProvider ได้เสมอ)
   static Future<String?> downloadApk({
     required String url,
     required Function(int received, int total) onReceiveProgress,
   }) async {
     try {
+      // ตรวจสอบ permission เขียน storage ก่อนดาวน์โหลด
+      final hasPermission = await requestWritePermission();
+      if (!hasPermission) {
+        if (kDebugMode) print('ไม่มีสิทธิ์เขียน storage – หยุดดาวน์โหลด');
+        return null;
+      }
+
       final dir = await getApplicationDocumentsDirectory();
       final savePath = '${dir.path}/app_update.apk';
 
