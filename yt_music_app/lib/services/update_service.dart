@@ -31,6 +31,12 @@ class AppUpdateInfo {
   }
 }
 
+class DownloadResult {
+  final String? path;
+  final String? errorMessage;
+  DownloadResult({this.path, this.errorMessage});
+}
+
 class UpdateService {
   static final Dio _dio = Dio();
 
@@ -69,50 +75,24 @@ class UpdateService {
 
   /// ขอสิทธิ์ติดตั้ง APK — คืน false ถ้าผู้ใช้ปฏิเสธ
   static Future<bool> requestStoragePermission() async {
-    if (Platform.isAndroid) {
-      final status = await Permission.requestInstallPackages.status;
-      if (!status.isGranted) {
-        final result = await Permission.requestInstallPackages.request();
-        if (!result.isGranted) {
-          if (kDebugMode) print('REQUEST_INSTALL_PACKAGES denied by user');
-          return false;
-        }
-      }
-      return true;
-    }
+    // ไม่ต้องขอสิทธิ์ requestInstallPackages ล่วงหน้า เพราะอาจเกิดบั๊กเด้งกลับ (denied) ทันทีบน Android 14
+    // ระบบ Android จะเด้งหน้าจอให้กดอนุญาตเองเมื่อเรียก OpenFilex
     return true;
   }
 
-  // Request permission to write to external storage (needed for downloading APK)
-  static Future<bool> requestWritePermission() async {
-    if (Platform.isAndroid) {
-      final status = await Permission.storage.status;
-      if (!status.isGranted) {
-        final result = await Permission.storage.request();
-        if (!result.isGranted) {
-          if (kDebugMode) print('WRITE_EXTERNAL_STORAGE denied by user');
-          return false;
-        }
-      }
-      return true;
-    }
-    return true;
-  }
 
-  /// ดาวน์โหลด APK ลง Internal Documents Directory (ใช้กับ FileProvider ได้เสมอ)
-  static Future<String?> downloadApk({
+  /// ดาวน์โหลด APK
+  static Future<DownloadResult> downloadApk({
     required String url,
     required Function(int received, int total) onReceiveProgress,
   }) async {
     try {
-      // ตรวจสอบ permission เขียน storage ก่อนดาวน์โหลด
-      final hasPermission = await requestWritePermission();
-      if (!hasPermission) {
-        if (kDebugMode) print('ไม่มีสิทธิ์เขียน storage – หยุดดาวน์โหลด');
-        return null;
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
       }
-
-      final dir = await getApplicationDocumentsDirectory();
+      dir ??= await getApplicationDocumentsDirectory();
+      
       final savePath = '${dir.path}/app_update.apk';
 
       // ลบไฟล์เก่าก่อนดาวน์โหลด
@@ -133,7 +113,7 @@ class UpdateService {
       final saved = File(savePath);
       if (!await saved.exists() || await saved.length() == 0) {
         if (kDebugMode) print('APK download failed or file empty');
-        return null;
+        return DownloadResult(errorMessage: 'ดาวน์โหลดไฟล์ไม่สมบูรณ์ หรือไฟล์ว่างเปล่า');
       }
 
       if (kDebugMode) {
@@ -141,10 +121,10 @@ class UpdateService {
         print('APK ready: $savePath (${mb.toStringAsFixed(2)} MB)');
       }
 
-      return savePath;
+      return DownloadResult(path: savePath);
     } catch (e) {
       if (kDebugMode) print('Download APK Error: $e');
-      return null;
+      return DownloadResult(errorMessage: 'เกิดข้อผิดพลาด: $e');
     }
   }
 
