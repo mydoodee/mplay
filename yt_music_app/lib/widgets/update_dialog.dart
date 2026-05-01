@@ -33,7 +33,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       _statusMessage = 'กำลังดาวน์โหลด...';
     });
 
-    final apkPath = await UpdateService.downloadApk(
+    final result = await UpdateService.downloadApk(
       url: widget.updateInfo.downloadUrl,
       onReceiveProgress: (received, total) {
         if (total != -1 && mounted) {
@@ -46,11 +46,11 @@ class _UpdateDialogState extends State<UpdateDialog> {
       },
     );
 
-    if (apkPath == null) {
+    if (result.path == null) {
       if (mounted) {
         setState(() {
           _isDownloading = false;
-          _statusMessage = 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่';
+          _statusMessage = result.errorMessage ?? 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่';
         });
       }
       return;
@@ -60,7 +60,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       setState(() => _statusMessage = 'กำลังเปิดหน้าติดตั้ง...');
     }
 
-    final installed = await UpdateService.installApk(apkPath);
+    final installed = await UpdateService.installApk(result.path!);
     if (mounted) {
       if (installed) {
         Navigator.of(context).pop();

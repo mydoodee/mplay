@@ -444,8 +444,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Always show inline search bar when index 0 (Home/Search)
                   _buildSearchBar(),
                   const SizedBox(height: 20),
+
+                  // Now Playing below search bar for Home
+                  if (songProvider.currentSong != null) ...[
+                    _buildNowPlayingSection(songProvider, results),
+                    const SizedBox(height: 8),
+                  ],
                 ],
-                if (_selectedIndex == 1) ...[_buildExploreTab(songProvider)],
+                if (_selectedIndex == 1) ...[
+                  // Now Playing at the VERY TOP for Explore
+                  if (songProvider.currentSong != null) ...[
+                    _buildNowPlayingSection(songProvider, results),
+                    const SizedBox(height: 16),
+                  ],
+                  _buildExploreTab(songProvider),
+                ],
                 if (_selectedIndex == 2) ...[_buildLocalMusicTab(songProvider)],
                 if (_selectedIndex == 3) ...[
                   Row(
@@ -554,188 +567,191 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
     }
 
-    // ACTIVE PLAYING SONG SECTION - ลบออกเพื่อให้แสดงในตำแหน่งเดิมของ list
-    // if (_selectedIndex == 0 && currentSong != null) {
-    //   slivers.add(_buildActivePlayingItem(songProvider, currentSong));
-    // }
+    // 1. HYBRID RECENTLY PLAYED SECTION
+    if (_selectedIndex == 0 && songProvider.history.isNotEmpty) {
+      // Filter out current song only when the "Now Playing" card is visible (Index 0 or 1)
+      // to avoid duplication. For other tabs, we don't need to filter.
+      final bool shouldFilter = _selectedIndex == 0 || _selectedIndex == 1;
 
-    // 1. RECENTLY PLAYED SECTION (if no search results)
-    if (_selectedIndex == 0 &&
-        results.isEmpty &&
-        songProvider.history.isNotEmpty) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxW),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
-                child: Row(
+      final filteredFullHistory = shouldFilter
+          ? songProvider.history.where((s) => s.id != currentSong?.id).toList()
+          : songProvider.history.toList();
+
+      final topHistory = filteredFullHistory.take(5).toList();
+      final remainingHistory = filteredFullHistory.skip(5).toList();
+
+      // A. Horizontal Top 5 Shelf (Filtered)
+      if (topHistory.isNotEmpty) {
+        slivers.add(
+          SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxW),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.history_rounded,
-                      color: Color(0xFFF15A24),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'เล่นล่าสุด',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    // ปุ่มลบประวัติทั้งหมด
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF1A1A1A),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            title: const Text(
-                              'ลบประวัติการเล่น',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                              ),
-                            ),
-                            content: const Text(
-                              'ต้องการลบประวัติการเล่นเพลงทั้งหมดหรือไม่?',
-                              style: TextStyle(
-                                color: Color(0xFFAAAAAA),
-                                fontSize: 14,
-                              ),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: const Text(
-                                  'ยกเลิก',
-                                  style: TextStyle(color: Color(0xFF888888)),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(ctx);
-                                  songProvider.clearHistory();
-                                },
-                                child: const Text(
-                                  'ลบทั้งหมด',
-                                  style: TextStyle(color: Color(0xFFFF4466)),
-                                ),
-                              ),
-                            ],
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 16),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.history_rounded,
+                            color: Color(0xFFF15A24),
+                            size: 20,
                           ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF333333)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.delete_outline_rounded,
-                              color: Color(0xFF888888),
-                              size: 16,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'ลบประวัติ',
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'เล่นล่าสุด',
                               style: TextStyle(
-                                color: Color(0xFF888888),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          TextButton(
+                            onPressed: () => songProvider.clearHistory(),
+                            child: const Text(
+                              'ล้าง',
+                              style: TextStyle(
+                                color: Color(0xFF777777),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    SizedBox(
+                      height: 180,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: EdgeInsets.symmetric(horizontal: hPad),
+                        itemCount: topHistory.length,
+                        itemBuilder: (context, index) {
+                          final song = topHistory[index];
+                          return GestureDetector(
+                            onTap: () => songProvider.playSong(
+                              song,
+                              queue: songProvider.history,
+                              index: songProvider.history.indexOf(song),
+                            ),
+                            child: Container(
+                              width: 150,
+                              margin: const EdgeInsets.only(right: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: CachedNetworkImage(
+                                        imageUrl: song.thumbnailUrl,
+                                        width: 150,
+                                        height: 110,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    song.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    song.artist,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF888888),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
+      }
 
-      slivers.add(
-        SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final song = songProvider.history[index];
-            final isFavorite = songProvider.favorites.any(
-              (s) => s.id == song.id,
-            );
-            final isCurrent = currentSong?.id == song.id;
+      // B. Vertical Remaining History (Only if not searching)
+      if (results.isEmpty && remainingHistory.isNotEmpty) {
+        slivers.add(
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final song = remainingHistory[index];
+              final isFavorite = songProvider.favorites.any(
+                (s) => s.id == song.id,
+              );
 
-            return Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxW),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: hPad),
-                  child: Dismissible(
-                    key: Key('history_${song.id}'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF4466).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.delete_rounded,
-                        color: Color(0xFFFF4466),
-                        size: 22,
-                      ),
-                    ),
-                    onDismissed: (_) => songProvider.removeFromHistory(song),
+              return Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxW),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: hPad),
                     child: SongTile(
                       song: song,
-                      isPlaying: isCurrent,
+                      isPlaying: false,
                       isFavorite: isFavorite,
                       onFavoritePressed: () =>
                           songProvider.toggleFavorite(song),
                       onTap: () => songProvider.playSong(
                         song,
                         queue: songProvider.history,
-                        index: index,
+                        index: songProvider.history.indexOf(song),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }, childCount: songProvider.history.length),
-        ),
-      );
+              );
+            }, childCount: remainingHistory.length),
+          ),
+        );
+      }
     }
 
-    // 2. SEARCH RESULTS SECTION
+    // 2. SEARCH RESULTS SECTION (Vertical List below)
     if (_selectedIndex == 0 && results.isNotEmpty) {
+      // Filter out current song from results
+      final filteredResults = results
+          .where((s) => s.id != currentSong?.id)
+          .toList();
+
       slivers.add(
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
-            final song = results[index];
+            final song = filteredResults[index];
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
-            final isCurrent = currentSong?.id == song.id;
 
             return Center(
               child: ConstrainedBox(
@@ -744,24 +760,68 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   child: SongTile(
                     song: song,
-                    isPlaying: isCurrent,
+                    isPlaying: false,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
                       song,
                       queue: results,
-                      index: index,
+                      index: results.indexOf(song),
                     ),
                   ),
                 ),
               ),
             );
-          }, childCount: results.length),
+          }, childCount: filteredResults.length),
         ),
       );
     }
 
     return slivers;
+  }
+
+  Widget _buildNowPlayingSection(
+    SongProvider songProvider,
+    List<Song> results,
+  ) {
+    final hPad = Responsive.hPadding(context);
+    final currentSong = songProvider.currentSong;
+    if (currentSong == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: const Row(
+            children: [
+              Icon(
+                Icons.play_circle_fill_rounded,
+                color: Color(0xFFF15A24),
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'กำลังเล่น',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildActivePlayingCard(
+          songProvider,
+          currentSong,
+          queue: songProvider.history.isNotEmpty
+              ? songProvider.history
+              : (results.isNotEmpty ? results : [currentSong]),
+          index: 0,
+        ),
+      ],
+    );
   }
 
   Widget _buildActivePlayingCard(

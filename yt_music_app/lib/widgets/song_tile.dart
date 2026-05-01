@@ -428,9 +428,18 @@ class SongTile extends StatelessWidget {
     );
 
     if (!isPlaying) {
-      return Material(
-        color: Colors.transparent,
-        child: tileContent,
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: Colors.transparent,
+            width: 1.0,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: tileContent,
+        ),
       );
     }
 
