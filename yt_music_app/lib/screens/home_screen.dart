@@ -19,6 +19,8 @@ import 'admin_login_dialog.dart';
 import '../widgets/voice_search_button.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
+import '../l10n/app_localizations.dart';
+import '../widgets/mini_equalizer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -67,44 +69,48 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'ประวัติการอัปเดต',
-            style: TextStyle(color: Colors.white, fontSize: 18),
-          ),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: Text(
-                content,
-                style: const TextStyle(
-                  color: Color(0xFFCCCCCC),
-                  fontSize: 13,
-                  height: 1.7,
+        builder: (context) {
+          final l10n = AppLocalizations.of(context)!;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1A1A1A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Text(
+              l10n.changelog,
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Text(
+                  content,
+                  style: const TextStyle(
+                    color: Color(0xFFCCCCCC),
+                    fontSize: 13,
+                    height: 1.7,
+                  ),
                 ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'ปิด',
-                style: TextStyle(color: Color(0xFFF15A24)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  l10n.close,
+                  style: const TextStyle(color: Color(0xFFF15A24)),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่สามารถโหลด Changelog ได้')),
-      );
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.cannotLoadChangelog)));
     }
   }
 
@@ -216,16 +222,16 @@ class _HomeScreenState extends State<HomeScreen> {
               PopupMenuItem<String>(
                 value: 'admin',
                 child: Row(
-                  children: const [
-                    Icon(
+                  children: [
+                    const Icon(
                       Icons.admin_panel_settings_rounded,
                       color: Color(0xFFF15A24),
                       size: 20,
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Text(
-                      'Admin Login',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
+                      AppLocalizations.of(context)!.adminLogin,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
                 ),
@@ -233,16 +239,16 @@ class _HomeScreenState extends State<HomeScreen> {
               PopupMenuItem<String>(
                 value: 'changelog',
                 child: Row(
-                  children: const [
-                    Icon(
+                  children: [
+                    const Icon(
                       Icons.history_edu_rounded,
                       color: Color(0xFFF15A24),
                       size: 20,
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Text(
-                      'Change Log',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
+                      AppLocalizations.of(context)!.changelog,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
                 ),
@@ -285,6 +291,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSearchBar() {
     final isTablet = Responsive.isTablet(context);
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -315,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 letterSpacing: 0.2,
               ),
               decoration: InputDecoration(
-                hintText: 'ค้นหาเพลง ศิลปิน หรือวางลิงก์...',
+                hintText: l10n.searchHint,
                 isDense: true,
                 hintStyle: TextStyle(
                   color: const Color(0xFF555555),
@@ -428,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSliverContent(SongProvider songProvider, List<Song> results) {
     final hPad = Responsive.hPadding(context);
-
+    final l10n = AppLocalizations.of(context)!;
     return SliverToBoxAdapter(
       child: Center(
         child: ConstrainedBox(
@@ -441,7 +448,6 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_selectedIndex == 0) ...[
-                  // Always show inline search bar when index 0 (Home/Search)
                   _buildSearchBar(),
                   const SizedBox(height: 20),
                 ],
@@ -451,9 +457,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'คลังเพลงของคุณ',
-                        style: TextStyle(
+                      Text(
+                        l10n.yourLibrary,
+                        style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
@@ -483,6 +489,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Widget> _buildSliverList(SongProvider songProvider, List<Song> results) {
+    final l10n = AppLocalizations.of(context)!;
     final hPad = Responsive.hPadding(context);
     final maxW = Responsive.contentMaxWidth(context);
     final currentSong = songProvider.currentSong;
@@ -491,19 +498,22 @@ class _HomeScreenState extends State<HomeScreen> {
     // Loading State
     if (_selectedIndex == 0 && songProvider.isLoading) {
       return [
-        const SliverFillRemaining(
+        SliverFillRemaining(
           child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(
+                const CircularProgressIndicator(
                   color: Color(0xFFF15A24),
                   strokeWidth: 2.5,
                 ),
                 SizedBox(height: 16),
                 Text(
-                  'กำลังค้นหา...',
-                  style: TextStyle(color: Color(0xFF777777), fontSize: 13),
+                  l10n.searching,
+                  style: const TextStyle(
+                    color: Color(0xFF777777),
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -534,18 +544,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'ค้นหาเพลงที่คุณชอบ',
-                  style: TextStyle(
+                Text(
+                  l10n.findSongsYouLike,
+                  style: const TextStyle(
                     color: Color(0xFF666666),
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'พิมพ์ชื่อเพลง ศิลปิน หรือวางลิงก์ YouTube',
-                  style: TextStyle(color: Color(0xFF444444), fontSize: 12),
+                Text(
+                  l10n.searchSongsArtistsOrLink,
+                  style: const TextStyle(
+                    color: Color(0xFF444444),
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -554,178 +567,187 @@ class _HomeScreenState extends State<HomeScreen> {
       ];
     }
 
-    // ACTIVE PLAYING SONG SECTION - ลบออกเพื่อให้แสดงในตำแหน่งเดิมของ list
-    // if (_selectedIndex == 0 && currentSong != null) {
-    //   slivers.add(_buildActivePlayingItem(songProvider, currentSong));
-    // }
+    // 1. HYBRID RECENTLY PLAYED SECTION
+    if (_selectedIndex == 0 && songProvider.history.isNotEmpty) {
+      // Filter out current song only when the "Now Playing" card is visible (Index 0 or 1)
+      // to avoid duplication. For other tabs, we don't need to filter.
+      final bool shouldFilter = _selectedIndex == 0 || _selectedIndex == 1;
 
-    // 1. RECENTLY PLAYED SECTION (if no search results)
-    if (_selectedIndex == 0 &&
-        results.isEmpty &&
-        songProvider.history.isNotEmpty) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxW),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 16),
-                child: Row(
+      final filteredFullHistory = songProvider.history.toList();
+
+      final topHistory = filteredFullHistory.take(5).toList();
+      final remainingHistory = filteredFullHistory.skip(5).toList();
+
+      // A. Horizontal Top 5 Shelf (Filtered)
+      if (topHistory.isNotEmpty) {
+        slivers.add(
+          SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxW),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(
-                      Icons.history_rounded,
-                      color: Color(0xFFF15A24),
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'เล่นล่าสุด',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    // ปุ่มลบประวัติทั้งหมด
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            backgroundColor: const Color(0xFF1A1A1A),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            title: const Text(
-                              'ลบประวัติการเล่น',
-                              style: TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                            content: const Text(
-                              'ต้องการลบประวัติการเล่นเพลงทั้งหมดหรือไม่?',
-                              style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: const Text(
-                                  'ยกเลิก',
-                                  style: TextStyle(color: Color(0xFF888888)),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pop(ctx);
-                                  songProvider.clearHistory();
-                                },
-                                child: const Text(
-                                  'ลบทั้งหมด',
-                                  style: TextStyle(color: Color(0xFFFF4466)),
-                                ),
-                              ),
-                            ],
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(hPad, 10, hPad, 16),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.history_rounded,
+                            color: const Color(0xFFF15A24),
+                            size: 20,
                           ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1E1E),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF333333)),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.delete_outline_rounded,
-                              color: Color(0xFF888888),
-                              size: 16,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'ลบประวัติ',
-                              style: TextStyle(
-                                color: Color(0xFF888888),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.recentlyPlayed,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          TextButton(
+                            onPressed: () => songProvider.clearHistory(),
+                            child: Text(
+                              l10n.clear,
+                              style: const TextStyle(
+                                color: Color(0xFF777777),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    SizedBox(
+                      height: 180,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: EdgeInsets.symmetric(horizontal: hPad),
+                        itemCount: topHistory.length,
+                        itemBuilder: (context, index) {
+                          final song = topHistory[index];
+                          return GestureDetector(
+                            onTap: () => songProvider.playSong(
+                              song,
+                              queue: songProvider.history,
+                              index: songProvider.history.indexOf(song),
+                            ),
+                            child: Container(
+                              width: 150,
+                              margin: const EdgeInsets.only(right: 16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(16),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.4,
+                                          ),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: CachedNetworkImage(
+                                        imageUrl: song.thumbnailUrl,
+                                        width: 150,
+                                        height: 110,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    song.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    song.artist,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFF888888),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
             ),
           ),
-        ),
-      );
+        );
+      }
 
-      slivers.add(
-        SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            final song = songProvider.history[index];
-            final isFavorite = songProvider.favorites.any(
-              (s) => s.id == song.id,
-            );
-            final isCurrent = currentSong?.id == song.id;
+      // B. Vertical Remaining History (Only if not searching)
+      if (results.isEmpty && remainingHistory.isNotEmpty) {
+        slivers.add(
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final song = remainingHistory[index];
+              final isFavorite = songProvider.favorites.any(
+                (s) => s.id == song.id,
+              );
 
-            return Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxW),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: hPad),
-                  child: Dismissible(
-                    key: Key('history_${song.id}'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF4466).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.delete_rounded,
-                        color: Color(0xFFFF4466),
-                        size: 22,
-                      ),
-                    ),
-                    onDismissed: (_) => songProvider.removeFromHistory(song),
+              return Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxW),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: hPad),
                     child: SongTile(
                       song: song,
-                      isPlaying: isCurrent,
+                      isPlaying: song.id == currentSong?.id,
                       isFavorite: isFavorite,
-                      onFavoritePressed: () => songProvider.toggleFavorite(song),
+                      onFavoritePressed: () =>
+                          songProvider.toggleFavorite(song),
                       onTap: () => songProvider.playSong(
                         song,
                         queue: songProvider.history,
-                        index: index,
+                        index: songProvider.history.indexOf(song),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          }, childCount: songProvider.history.length),
-        ),
-      );
+              );
+            }, childCount: remainingHistory.length),
+          ),
+        );
+      }
     }
 
-    // 2. SEARCH RESULTS SECTION
+    // 2. SEARCH RESULTS SECTION (Vertical List below)
     if (_selectedIndex == 0 && results.isNotEmpty) {
+      // Filter out current song from results
+      final filteredResults = results.toList();
+
       slivers.add(
         SliverList(
           delegate: SliverChildBuilderDelegate((context, index) {
-            final song = results[index];
+            final song = filteredResults[index];
             final isFavorite = songProvider.favorites.any(
               (s) => s.id == song.id,
             );
-            final isCurrent = currentSong?.id == song.id;
 
             return Center(
               child: ConstrainedBox(
@@ -734,24 +756,68 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: EdgeInsets.symmetric(horizontal: hPad),
                   child: SongTile(
                     song: song,
-                    isPlaying: isCurrent,
+                    isPlaying: song.id == currentSong?.id,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
                       song,
                       queue: results,
-                      index: index,
+                      index: results.indexOf(song),
                     ),
                   ),
                 ),
               ),
             );
-          }, childCount: results.length),
+          }, childCount: filteredResults.length),
         ),
       );
     }
 
     return slivers;
+  }
+
+  Widget _buildNowPlayingSection(
+    SongProvider songProvider,
+    List<Song> results,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final currentSong = songProvider.currentSong;
+    if (currentSong == null) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.play_circle_fill_rounded,
+                color: Color(0xFFF15A24),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                l10n.nowPlaying,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildActivePlayingCard(
+          songProvider,
+          currentSong,
+          queue: songProvider.history.isNotEmpty
+              ? songProvider.history
+              : (results.isNotEmpty ? results : [currentSong]),
+          index: 0,
+        ),
+      ],
+    );
   }
 
   Widget _buildActivePlayingCard(
@@ -793,6 +859,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNav() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: Color(0xFF1A1A1A), width: 0.5)),
@@ -813,34 +880,34 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Padding(
+            icon: const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Icon(Icons.home_filled, size: 22),
             ),
-            label: 'หน้าแรก',
+            label: l10n.tabMusic,
           ),
           BottomNavigationBarItem(
-            icon: Padding(
+            icon: const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Icon(Icons.explore_outlined, size: 22),
             ),
-            label: 'สำรวจ',
+            label: l10n.tabExplore,
           ),
           BottomNavigationBarItem(
-            icon: Padding(
+            icon: const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Icon(Icons.folder_rounded, size: 22),
             ),
-            label: 'ไฟล์เพลง',
+            label: l10n.tabLocalFiles,
           ),
           BottomNavigationBarItem(
-            icon: Padding(
+            icon: const Padding(
               padding: EdgeInsets.only(bottom: 4),
               child: Icon(Icons.library_music_outlined, size: 22),
             ),
-            label: 'คลังเพลง',
+            label: l10n.tabLibrary,
           ),
         ],
       ),
@@ -848,10 +915,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPlaylistGrid(SongProvider provider, List<Song> results) {
+    final l10n = AppLocalizations.of(context)!;
+    final currentSong = provider.currentSong;
     final items = [
       Playlist(
         id: -1,
-        name: 'เพลงที่ชอบ',
+        name: l10n.favorites,
         createdAt: DateTime.now().toIso8601String(),
         songs: provider.favorites,
       ),
@@ -892,13 +961,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   errorWidget: (context, url, error) => CachedNetworkImage(
                     imageUrl: playlist.songs[0].hqThumbnailUrl,
                     fit: BoxFit.cover,
-                    errorWidget: (context, url, err) =>
-                        Container(
-                          color: const Color(0xFF1A1A1A),
-                          child: const Center(
-                            child: AppLogo(size: 40, showText: false),
-                          ),
-                        ),
+                    errorWidget: (context, url, err) => Container(
+                      color: const Color(0xFF1A1A1A),
+                      child: const Center(
+                        child: AppLogo(size: 40, showText: false),
+                      ),
+                    ),
                   ),
                 ),
               if (playlist.songs.isEmpty)
@@ -951,24 +1019,54 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 top: 8,
                 right: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${playlist.songs.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.2,
+                child: Row(
+                  children: [
+                    if (playlist.songs.any((s) => s.id == currentSong?.id))
+                      Container(
+                        margin: const EdgeInsets.only(right: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF15A24).withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          children: [
+                            MiniEqualizer(color: Colors.white, size: 8),
+                            SizedBox(width: 4),
+                            Text(
+                              'Playing',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${playlist.songs.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
               // Title + subtitle on gradient
@@ -989,9 +1087,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.1,
-                        shadows: [
-                          Shadow(color: Colors.black, blurRadius: 6),
-                        ],
+                        shadows: [Shadow(color: Colors.black, blurRadius: 6)],
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1036,23 +1132,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLocalMusicTab(SongProvider songProvider) {
+    final l10n = AppLocalizations.of(context)!;
     final localSongs = songProvider.localSongs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'ไฟล์เพลง',
-          style: TextStyle(
+        Text(
+          l10n.localMusicTitle,
+          style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w800,
             color: Colors.white,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'เพิ่มเพลงจากเครื่องหรือ USB Drive ของคุณ',
-          style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+        Text(
+          l10n.localMusicSubtitle,
+          style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
         ),
         const SizedBox(height: 20),
 
@@ -1062,7 +1159,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _buildLocalActionButton(
                 icon: Icons.create_new_folder_rounded,
-                label: 'เพิ่มโฟลเดอร์',
+                label: l10n.addFolder,
                 onTap: () => songProvider.addLocalFolder(),
               ),
             ),
@@ -1070,7 +1167,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _buildLocalActionButton(
                 icon: Icons.audio_file_rounded,
-                label: 'เพิ่มไฟล์เพลง',
+                label: l10n.addFiles,
                 onTap: () => songProvider.addLocalFiles(),
               ),
             ),
@@ -1080,19 +1177,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // สถานะกำลังสแกน
         if (songProvider.isScanning) ...[
-          const Center(
+          Center(
             child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: Column(
                 children: [
-                  CircularProgressIndicator(
+                  const CircularProgressIndicator(
                     color: Color(0xFFF15A24),
                     strokeWidth: 2.5,
                   ),
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
-                    'กำลังอ่านไฟล์เพลง...',
-                    style: TextStyle(color: Color(0xFF777777), fontSize: 13),
+                    l10n.scanningFiles,
+                    style: const TextStyle(
+                      color: Color(0xFF777777),
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               ),
@@ -1138,17 +1238,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: const Color(0xFFF15A24),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.play_arrow_rounded,
                           color: Colors.white,
                           size: 18,
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 4),
                         Text(
-                          'เล่นทั้งหมด',
+                          l10n.playAll,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -1214,8 +1314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   song: song,
                   isPlaying: isCurrent,
                   isFavorite: isFavorite,
-                  onFavoritePressed: () =>
-                      songProvider.toggleFavorite(song),
+                  onFavoritePressed: () => songProvider.toggleFavorite(song),
                   onTap: () => songProvider.playSong(
                     song,
                     queue: localSongs,
@@ -1250,18 +1349,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'ยังไม่มีเพลงในเครื่อง',
-                    style: TextStyle(
+                  Text(
+                    l10n.noLocalSongsMessage,
+                    style: const TextStyle(
                       color: Color(0xFF666666),
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'กดปุ่มด้านบนเพื่อเพิ่มโฟลเดอร์หรือไฟล์เพลง',
-                    style: TextStyle(color: Color(0xFF444444), fontSize: 12),
+                  Text(
+                    l10n.tapToAddLocalSongsMessage,
+                    style: const TextStyle(
+                      color: Color(0xFF444444),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -1305,68 +1407,70 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildExploreTab(SongProvider songProvider) {
+    final l10n = AppLocalizations.of(context)!;
+    final currentYear = DateTime.now().year;
     // List of categories
     final categories = [
       {
-        'title': 'เพลงฮิตมาแรง',
-        'subtitle': 'อัปเดตเพลงฮิตที่สุด ${DateTime.now().year}',
-        'query': 'เพลงใหม่มาแรง ${DateTime.now().year}',
+        'title': l10n.exploreHot,
+        'subtitle': l10n.exploreHotSub(currentYear),
+        'query': l10n.exploreHotQuery(currentYear),
         'icon': Icons.local_fire_department_rounded,
         'colors': [const Color(0xFFFF5722), const Color(0xFFFF9800)],
         'image': 'https://porawat.github.io/app-ads/images/photo-1.jpeg',
       },
       {
-        'title': 'ชิลๆ ฟีลคาเฟ่',
-        'subtitle': 'เพลงฟังสบายตอนทำงาน',
-        'query': 'เพลงฟังสบาย คาเฟ่ ${DateTime.now().year}',
+        'title': l10n.exploreRelax,
+        'subtitle': l10n.exploreRelaxSub,
+        'query': l10n.exploreRelaxQuery(currentYear),
         'icon': Icons.coffee_rounded,
         'colors': [const Color(0xFF795548), const Color(0xFFA1887F)],
         'image': 'https://porawat.github.io/app-ads/images/photo-2.jpeg',
       },
       {
-        'title': 'ลูกทุ่งอินดี้',
-        'subtitle': 'เพลงลูกทุ่งยอดฮิต 100 ล้านวิว',
-        'query': 'เพลงลูกทุ่งฮิตใหม่ล่าสุด',
+        'title': l10n.exploreIndie,
+        'subtitle': l10n.exploreIndieSub,
+        'query': l10n.exploreIndieQuery,
         'icon': Icons.mic_external_on_rounded,
         'colors': [const Color(0xFFE91E63), const Color(0xFFF06292)],
         'image': 'https://porawat.github.io/app-ads/images/photo-3.jpeg',
       },
       {
-        'title': 'ป๊อปสากลคูลๆ',
-        'subtitle': 'เพลงสากลฟังสบาย',
-        'query': 'เพลงสากลยอดฮิต ${DateTime.now().year}',
+        'title': l10n.explorePop,
+        'subtitle': l10n.explorePopSub,
+        'query': l10n.explorePopQuery(currentYear),
         'icon': Icons.public_rounded,
         'colors': [const Color(0xFF2196F3), const Color(0xFF64B5F6)],
         'image': 'https://porawat.github.io/app-ads/images/photo-4.jpeg',
       },
       {
-        'title': 'ร็อกมันส์ๆ',
-        'subtitle': 'จัดเต็มทุกจังหวะ',
-        'query': 'เพลงร็อกไทยยุค 90-ปัจจุบัน',
+        'title': l10n.exploreRock,
+        'subtitle': l10n.exploreRockSub,
+        'query': l10n.exploreRockQuery,
         'icon': Icons.electric_bolt_rounded,
         'colors': [const Color(0xFFF44336), const Color(0xFFEF5350)],
         'image': 'https://porawat.github.io/app-ads/images/photo-5.jpeg',
       },
       {
-        'title': 'เศร้าซึม',
-        'subtitle': 'เพลงช้ากินใจ',
-        'query': 'เพลงเศร้า อกหัก ${DateTime.now().year}',
+        'title': l10n.exploreSad,
+        'subtitle': l10n.exploreSadSub,
+        'query': l10n.exploreSadQuery(currentYear),
         'icon': Icons.water_drop_rounded,
         'colors': [const Color(0xFF3F51B5), const Color(0xFF7986CB)],
         'image': 'https://porawat.github.io/app-ads/images/photo-6.jpg',
       },
       {
-        'title': 'เพลงเต้นตื๊ดๆ',
-        'subtitle': 'ปลุกพลังความสนุก',
-        'query': 'เพลงแดนซ์ ${DateTime.now().year} สายย่อ',
+        'title': l10n.exploreDance,
+        'subtitle': l10n.exploreDanceSub,
+        'query': l10n.exploreDanceQuery(currentYear),
         'icon': Icons.speaker_group_rounded,
         'colors': [const Color(0xFF9C27B0), const Color(0xFFE040FB)],
         'image': 'https://porawat.github.io/app-ads/images/photo-7.jpg',
       },
       {
-        'title': 'คอนเสิร์ตฮิต',
-        'subtitle': 'การแสดงสดสุดมันส์',
-        'query': 'บันทึกการแสดงสด คอนเสิร์ต',
+        'title': l10n.exploreConcert,
+        'subtitle': l10n.exploreConcertSub,
+        'query': l10n.exploreConcertQuery,
         'icon': Icons.stadium_rounded,
         'colors': [const Color(0xFF009688), const Color(0xFF4DB6AC)],
         'image': 'https://porawat.github.io/app-ads/images/photo-8.jpeg',
@@ -1383,18 +1487,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'สำรวจ',
-          style: TextStyle(
+        Text(
+          l10n.exploreTitle,
+          style: const TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w800,
             color: Colors.white,
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ',
-          style: TextStyle(color: Color(0xFF888888), fontSize: 14),
+        Text(
+          l10n.exploreSubtitle,
+          style: const TextStyle(color: Color(0xFF888888), fontSize: 14),
         ),
         const SizedBox(height: 24),
         GridView.builder(
@@ -1473,10 +1577,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(
-                            cat['icon'] as IconData,
-                            color: Colors.white,
-                            size: 28,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Icon(
+                                cat['icon'] as IconData,
+                                color: Colors.white,
+                                size: 28,
+                              ),
+                              if (_searchController.text == cat['query'])
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF15A24)
+                                        .withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    children: [
+                                      MiniEqualizer(
+                                        color: Colors.white,
+                                        size: 10,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Playing',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                           Flexible(
                             child: Column(

@@ -71,17 +71,22 @@ class MiniPlayer extends StatelessWidget {
                   Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF141414), // Deeper black
+                        color: const Color(0xFF1A0D00),
                         borderRadius: BorderRadius.circular(isTablet ? 20 : 14),
                         border: Border.all(
-                          color: const Color(0xFF252525),
-                          width: 1,
+                          color: const Color(0xFFF15A24).withValues(alpha: 0.45),
+                          width: 1.2,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 15,
-                            spreadRadius: 2,
+                            color: const Color(0xFFF15A24).withValues(alpha: 0.15),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                          ),
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
                         ],
                       ),

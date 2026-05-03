@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/update_service.dart';
+import '../l10n/app_localizations.dart';
 
 class UpdateDialog extends StatefulWidget {
   final AppUpdateInfo updateInfo;
@@ -19,56 +20,62 @@ class _UpdateDialogState extends State<UpdateDialog> {
     // ขอสิทธิ์ติดตั้ง APK
     final hasPermission = await UpdateService.requestStoragePermission();
     if (!hasPermission && mounted) {
+      final l10n = AppLocalizations.of(context)!;
       setState(() {
         _isDownloading = false;
-        _statusMessage =
-            'กรุณาอนุญาต "ติดตั้งแอปที่ไม่รู้จัก" ในการตั้งค่าเพื่อดำเนินการต่อ';
+        _statusMessage = l10n.installPermissionRequired;
       });
       return;
     }
 
+    final l10n = AppLocalizations.of(context)!;
     setState(() {
       _isDownloading = true;
       _progress = 0.0;
-      _statusMessage = 'กำลังดาวน์โหลด...';
+      _statusMessage = l10n.downloading;
     });
 
-    final apkPath = await UpdateService.downloadApk(
+    final result = await UpdateService.downloadApk(
       url: widget.updateInfo.downloadUrl,
       onReceiveProgress: (received, total) {
         if (total != -1 && mounted) {
+          final l10n = AppLocalizations.of(context)!;
           setState(() {
             _progress = received / total;
-            _statusMessage =
-                'ดาวน์โหลด ${(received / 1024 / 1024).toStringAsFixed(1)} MB / ${(total / 1024 / 1024).toStringAsFixed(1)} MB';
+            _statusMessage = l10n.downloadProgress(
+              (received / 1024 / 1024).toStringAsFixed(1),
+              (total / 1024 / 1024).toStringAsFixed(1),
+            );
           });
         }
       },
     );
 
-    if (apkPath == null) {
+    if (result.path == null) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         setState(() {
           _isDownloading = false;
-          _statusMessage = 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่';
+          _statusMessage = result.errorMessage ?? l10n.downloadFailed;
         });
       }
       return;
     }
 
     if (mounted) {
-      setState(() => _statusMessage = 'กำลังเปิดหน้าติดตั้ง...');
+      final l10n = AppLocalizations.of(context)!;
+      setState(() => _statusMessage = l10n.openingInstaller);
     }
 
-    final installed = await UpdateService.installApk(apkPath);
+    final installed = await UpdateService.installApk(result.path!);
     if (mounted) {
+      final l10n = AppLocalizations.of(context)!;
       if (installed) {
         Navigator.of(context).pop();
       } else {
         setState(() {
           _isDownloading = false;
-          _statusMessage =
-              'ไม่สามารถเปิดตัวติดตั้งได้ กรุณาตรวจสอบสิทธิ์การติดตั้งแอปจากแหล่งที่ไม่รู้จัก';
+          _statusMessage = l10n.installFailed;
         });
       }
     }
@@ -76,6 +83,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Dialog(
       backgroundColor: const Color(0xFF1A1A1A),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -104,20 +112,21 @@ class _UpdateDialogState extends State<UpdateDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'มีอัปเดตใหม่!',
-                        style: TextStyle(
+                      Text(
+                        l10n.updateAvailable,
+                        style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'เวอร์ชัน ${widget.updateInfo.latestVersion}',
+                        l10n.version(widget.updateInfo.latestVersion),
                         style: const TextStyle(
-                          color: Color(0xFF888888),
-                          fontSize: 14,
+                          color: Color(0xFFF15A24),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -137,18 +146,18 @@ class _UpdateDialogState extends State<UpdateDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'รายละเอียดการอัปเดต:',
-                    style: TextStyle(
+                  Text(
+                    l10n.updateDetails,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    widget.updateInfo.releaseNotes.isEmpty 
-                        ? '• ปรับปรุงประสิทธิภาพและแก้ไขข้อผิดพลาด'
+                    widget.updateInfo.releaseNotes.isEmpty
+                        ? l10n.defaultReleaseNotes
                         : widget.updateInfo.releaseNotes,
                     style: const TextStyle(
                       color: Color(0xFFCCCCCC),
@@ -160,12 +169,14 @@ class _UpdateDialogState extends State<UpdateDialog> {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             if (_isDownloading) ...[
               LinearProgressIndicator(
                 value: _progress,
                 backgroundColor: const Color(0xFF333333),
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF15A24)),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFFF15A24),
+                ),
                 minHeight: 8,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -206,9 +217,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'ไว้ทีหลัง',
-                        style: TextStyle(color: Color(0xFF888888), fontSize: 16),
+                      child: Text(
+                        l10n.later,
+                        style: const TextStyle(color: Color(0xFF888888)),
                       ),
                     ),
                   ),
@@ -225,9 +236,12 @@ class _UpdateDialogState extends State<UpdateDialog> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'ดาวน์โหลด',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      child: Text(
+                        l10n.download,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),

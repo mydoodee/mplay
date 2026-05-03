@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audiotags
+  flutter_localization
   just_audio_windows
   permission_handler_windows
   speech_to_text_windows

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import '../l10n/app_localizations.dart';
 
 enum VoiceState { idle, listening, processing }
 
@@ -82,7 +83,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
       },
       listenFor: const Duration(seconds: 10),
       pauseFor: const Duration(seconds: 2),
-      localeId: 'th_TH', // ภาษาไทยก่อน
+      localeId: Localizations.localeOf(context).toString(),
       listenOptions: SpeechListenOptions(
         partialResults: true,
         cancelOnError: true,
@@ -122,7 +123,9 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
     setState(() => _state = VoiceState.idle);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('ไม่ได้ยินเสียง: $error'),
+        content: Text(
+          AppLocalizations.of(context)!.voiceNoSound(error),
+        ),
         backgroundColor: const Color(0xFF2A2A2A),
         duration: const Duration(seconds: 2),
       ),
@@ -131,10 +134,10 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
 
   void _showUnavailableSnack() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('ไมโครโฟนไม่พร้อมใช้งาน'),
-        backgroundColor: Color(0xFF2A2A2A),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(AppLocalizations.of(context)!.voiceMicUnavailable),
+        backgroundColor: const Color(0xFF2A2A2A),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -236,6 +239,9 @@ class VoiceListeningOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final textToShow = partialText.isEmpty ? l10n.voiceListening : partialText;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -252,7 +258,7 @@ class VoiceListeningOverlay extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              partialText.isEmpty ? 'กำลังฟัง...' : partialText,
+              textToShow,
               style: TextStyle(
                 color: partialText.isEmpty
                     ? const Color(0xFF777777)

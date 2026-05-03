@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'home_screen.dart';
 import '../widgets/app_logo.dart';
+import '../l10n/app_localizations.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -222,9 +223,9 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'เพลงทุกอารมณ์ ฟังได้ทุกที่',
-                        style: TextStyle(
+                      Text(
+                        AppLocalizations.of(context)!.splashTagline,
+                        style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFFCCCCCC),
                           fontWeight: FontWeight.w300,
@@ -284,11 +285,12 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'กำลังโหลด...',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.4),
-                            letterSpacing: 2,
+                          AppLocalizations.of(context)!.splashLoading,
+                          style: const TextStyle(
+                            color: Color(0xFF555555),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1.5,
                           ),
                         ),
                       ],
