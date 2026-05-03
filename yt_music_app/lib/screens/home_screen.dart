@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
@@ -32,7 +31,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  Timer? _debounce;
+
   int _selectedIndex = 0;
   String _appVersion = '';
   String _listeningText = ''; // real-time text จาก voice search
@@ -136,19 +135,24 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    // หน่วงเวลา 1 วินาทีหลังจากพิมพ์ตัวอักษรตัวสุดท้ายเสร็จ ถึงจะเริ่มค้นหา
-    _debounce = Timer(const Duration(milliseconds: 1000), () {
-      if (query.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).search(query);
-      }
-    });
+  /// ค้นหาเมื่อกดปุ่มค้นหาหรือกด Enter
+  void _performSearch() {
+    final query = _searchController.text.trim();
+    if (query.isNotEmpty) {
+      FocusScope.of(context).unfocus(); // ปิด keyboard
+      Provider.of<SongProvider>(context, listen: false).search(query);
+    }
+  }
+
+  /// เรียกจาก voice search — ค้นหาทันที
+  void _onVoiceSearchResult(String query) {
+    if (query.isNotEmpty) {
+      Provider.of<SongProvider>(context, listen: false).search(query);
+    }
   }
 
   @override
@@ -314,7 +318,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Center(
             child: TextField(
               controller: _searchController,
-              onChanged: _onSearchChanged,
+              onSubmitted: (_) => _performSearch(),
+              textInputAction: TextInputAction.search,
               textAlignVertical: TextAlignVertical.center,
               style: TextStyle(
                 color: Colors.white,
@@ -332,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Icon(
                     Icons.search_rounded,
-                    color: const Color(0xFFF15A24),
+                    color: const Color(0xFF555555),
                     size: isTablet ? 26 : 22,
                   ),
                 ),
@@ -341,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ปุ่ม Clear
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _searchController,
                       builder: (context, value, child) {
@@ -353,13 +359,41 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 onPressed: () {
                                   _searchController.clear();
-                                  _onSearchChanged('');
                                   setState(() => _listeningText = '');
+                                  Provider.of<SongProvider>(context, listen: false).clearSearch();
                                 },
                               )
                             : const SizedBox.shrink();
                       },
                     ),
+                    // ปุ่มค้นหา
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _searchController,
+                      builder: (context, value, child) {
+                        return value.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: _performSearch,
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF15A24),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white,
+                                    size: isTablet ? 22 : 18,
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink();
+                      },
+                    ),
+                    // ปุ่มค้นหาด้วยเสียง (ใช้แบบเดิม)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: VoiceSearchButton(
@@ -371,7 +405,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             _listeningText = '';
                             _searchController.text = text;
                           });
-                          _onSearchChanged(text);
+                          _onVoiceSearchResult(text);
                         },
                       ),
                     ),
