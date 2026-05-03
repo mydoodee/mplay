@@ -32,6 +32,7 @@
   "allSongs": "เพลงทั้งหมด",
 
   "noSongPlaying": "ไม่มีเพลงที่กำลังเล่นอยู่",
+  "nowPlaying": "กำลังเล่น",
   "upNext": "รายการถัดไป",
   "currentQueue": "รายการเพลงที่เล่นอยู่",
   "noSongsInQueue": "ไม่มีเพลงในรายการ",
@@ -110,12 +111,91 @@
   "addFolder": "เพิ่มโฟลเดอร์",
   "addFiles": "เพิ่มไฟล์",
   "scanningFiles": "กำลังสแกนไฟล์...",
-  "localSongsCount": "{count} เพลงจากเครื่อง",
-  "noLocalSongs": "ยังไม่มีเพลงจากเครื่อง",
-  "tapToAddLocalSongs": "แตะ 'เพิ่มโฟลเดอร์' หรือ 'เพิ่มไฟล์' เพื่อเพิ่มเพลง",
+
+  "changelog": "Changelog",
+  "appVersion": "v{version}",
+  "@appVersion": {
+    "placeholders": {
+      "version": {"type": "String"}
+    }
+  },
+  "localMusicTitle": "ไฟล์เพลง",
+  "localMusicSubtitle": "เพิ่มเพลงจากเครื่องหรือ USB Drive ของคุณ",
+  "scanningFiles": "กำลังอ่านไฟล์เพลง...",
+  "noLocalSongsMessage": "ยังไม่มีเพลงในเครื่อง",
+  "tapToAddLocalSongsMessage": "กดปุ่มด้านบนเพื่อเพิ่มโฟลเดอร์หรือไฟล์เพลง",
   "removeSong": "ลบเพลง",
   "clearAll": "ล้างทั้งหมด",
 
-  "changelog": "Changelog",
-  "appVersion": "v{version}"
+  "exploreHot": "เพลงฮิตมาแรง",
+  "exploreHotSub": "อัปเดตเพลงฮิตที่สุด {year}",
+  "@exploreHotSub": {
+    "placeholders": {
+      "year": {"type": "int"}
+    }
+  },
+  "exploreHotQuery": "เพลงใหม่มาแรง {year}",
+  "exploreRelax": "ชิลๆ ฟีลคาเฟ่",
+  "exploreRelaxSub": "เพลงฟังสบายตอนทำงาน",
+  "exploreRelaxQuery": "เพลงฟังสบาย คาเฟ่ {year}",
+  "exploreIndie": "ลูกทุ่งอินดี้",
+  "exploreIndieSub": "เพลงลูกทุ่งยอดฮิต 100 ล้านวิว",
+  "exploreIndieQuery": "เพลงลูกทุ่งฮิตใหม่ล่าสุด",
+  "explorePop": "ป๊อปสากลคูลๆ",
+  "explorePopSub": "เพลงสากลฟังสบาย",
+  "explorePopQuery": "เพลงสากลยอดฮิต {year}",
+  "exploreRock": "ร็อกมันส์ๆ",
+  "exploreRockSub": "จัดเต็มทุกจังหวะ",
+  "exploreRockQuery": "เพลงร็อกไทยยุค 90-ปัจจุบัน",
+  "exploreSad": "เศร้าซึม",
+  "exploreSadSub": "เพลงช้ากินใจ",
+  "exploreSadQuery": "เพลงเศร้า อกหัก {year}",
+  "exploreDance": "เพลงเต้นตื๊ดๆ",
+  "exploreDanceSub": "ปลุกพลังความสนุก",
+  "exploreDanceQuery": "เพลงแดนซ์ {year} สายย่อ",
+  "exploreConcert": "คอนเสิร์ตฮิต",
+  "exploreConcertSub": "การแสดงสดสุดมันส์",
+  "exploreConcertQuery": "บันทึกการแสดงสด คอนเสิร์ต",
+
+  "adminDashboardTitle": "ผู้ใช้งานระบบ",
+  "adminOnlineCount": "ออนไลน์: {count} คน",
+  "@adminOnlineCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "adminUser": "ผู้ใช้",
+  "adminLastSeen": "ล่าสุดเมื่อ",
+  "adminUsageTime": "เวลาใช้งาน",
+  "adminHoursMinutes": "{hours} ชม. {minutes} นาที",
+  "@adminHoursMinutes": {
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminMinutes": "{minutes} นาที",
+  "@adminMinutes": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminLoadingUsers": "กำลังโหลดข้อมูลผู้ใช้...",
+  "adminErrorLoading": "เกิดข้อผิดพลาดในการโหลดผู้ใช้: {error}",
+  "@adminErrorLoading": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "adminLoginTitle": "แอดมินระบบ mPlay",
+  "usernameLabel": "ชื่อผู้ใช้",
+  "passwordLabel": "รหัสผ่าน",
+  "adminUsedTimePrefix": "ใช้งานแล้ว: {time}",
+  "@adminUsedTimePrefix": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "exploreTitle": "สำรวจ",
+  "exploreSubtitle": "พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ"
 }

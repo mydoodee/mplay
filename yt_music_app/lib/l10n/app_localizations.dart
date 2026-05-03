@@ -254,6 +254,12 @@ abstract class AppLocalizations {
   /// **'No song is currently playing'**
   String get noSongPlaying;
 
+  /// No description provided for @nowPlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Now Playing'**
+  String get nowPlaying;
+
   /// No description provided for @upNext.
   ///
   /// In en, this message translates to:
@@ -593,7 +599,7 @@ abstract class AppLocalizations {
   /// No description provided for @adminOnlineCount.
   ///
   /// In en, this message translates to:
-  /// **'Online: {count} users'**
+  /// **'Online: {count} people'**
   String adminOnlineCount(int count);
 
   /// No description provided for @adminNoUsers.
@@ -605,19 +611,19 @@ abstract class AppLocalizations {
   /// No description provided for @adminUsageTime.
   ///
   /// In en, this message translates to:
-  /// **'Used: {time}'**
+  /// **'Usage time'**
   String adminUsageTime(String time);
 
   /// No description provided for @adminHoursMinutes.
   ///
   /// In en, this message translates to:
-  /// **'{hours} hours {minutes} minutes'**
+  /// **'{hours} h {minutes} m'**
   String adminHoursMinutes(int hours, int minutes);
 
   /// No description provided for @adminMinutes.
   ///
   /// In en, this message translates to:
-  /// **'{minutes} minutes'**
+  /// **'{minutes} m'**
   String adminMinutes(int minutes);
 
   /// No description provided for @adminLoginInvalid.
@@ -671,7 +677,7 @@ abstract class AppLocalizations {
   /// No description provided for @scanningFiles.
   ///
   /// In en, this message translates to:
-  /// **'Scanning files...'**
+  /// **'Scanning music files...'**
   String get scanningFiles;
 
   /// No description provided for @localSongsCount.
@@ -715,6 +721,240 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'v{version}'**
   String appVersion(String version);
+
+  /// No description provided for @localMusicTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Music'**
+  String get localMusicTitle;
+
+  /// No description provided for @localMusicSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add songs from your device or USB Drive'**
+  String get localMusicSubtitle;
+
+  /// No description provided for @noLocalSongsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No local songs yet'**
+  String get noLocalSongsMessage;
+
+  /// No description provided for @tapToAddLocalSongsMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap buttons above to add folders or files'**
+  String get tapToAddLocalSongsMessage;
+
+  /// No description provided for @exploreHot.
+  ///
+  /// In en, this message translates to:
+  /// **'Hot Hits'**
+  String get exploreHot;
+
+  /// No description provided for @exploreHotSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated hottest hits for {year}'**
+  String exploreHotSub(int year);
+
+  /// No description provided for @exploreHotQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'hottest new songs {year}'**
+  String exploreHotQuery(Object year);
+
+  /// No description provided for @exploreRelax.
+  ///
+  /// In en, this message translates to:
+  /// **'Relaxing Cafe'**
+  String get exploreRelax;
+
+  /// No description provided for @exploreRelaxSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Relaxing music for work'**
+  String get exploreRelaxSub;
+
+  /// No description provided for @exploreRelaxQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'relaxing cafe music {year}'**
+  String exploreRelaxQuery(Object year);
+
+  /// No description provided for @exploreIndie.
+  ///
+  /// In en, this message translates to:
+  /// **'Indie Luk Thung'**
+  String get exploreIndie;
+
+  /// No description provided for @exploreIndieSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Indie Luk Thung hits 100M views'**
+  String get exploreIndieSub;
+
+  /// No description provided for @exploreIndieQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'latest luk thung hits'**
+  String get exploreIndieQuery;
+
+  /// No description provided for @explorePop.
+  ///
+  /// In en, this message translates to:
+  /// **'Cool Pop'**
+  String get explorePop;
+
+  /// No description provided for @explorePopSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Relaxing international pop'**
+  String get explorePopSub;
+
+  /// No description provided for @explorePopQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'top hits international {year}'**
+  String explorePopQuery(Object year);
+
+  /// No description provided for @exploreRock.
+  ///
+  /// In en, this message translates to:
+  /// **'Rock On'**
+  String get exploreRock;
+
+  /// No description provided for @exploreRockSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Every beat packed'**
+  String get exploreRockSub;
+
+  /// No description provided for @exploreRockQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'thai rock 90s to present'**
+  String get exploreRockQuery;
+
+  /// No description provided for @exploreSad.
+  ///
+  /// In en, this message translates to:
+  /// **'Sad Vibes'**
+  String get exploreSad;
+
+  /// No description provided for @exploreSadSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Heart-touching slow songs'**
+  String get exploreSadSub;
+
+  /// No description provided for @exploreSadQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'sad heartbroken songs {year}'**
+  String exploreSadQuery(Object year);
+
+  /// No description provided for @exploreDance.
+  ///
+  /// In en, this message translates to:
+  /// **'Dance & Party'**
+  String get exploreDance;
+
+  /// No description provided for @exploreDanceSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Wake up the fun'**
+  String get exploreDanceSub;
+
+  /// No description provided for @exploreDanceQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'dance songs {year} party'**
+  String exploreDanceQuery(Object year);
+
+  /// No description provided for @exploreConcert.
+  ///
+  /// In en, this message translates to:
+  /// **'Hit Concerts'**
+  String get exploreConcert;
+
+  /// No description provided for @exploreConcertSub.
+  ///
+  /// In en, this message translates to:
+  /// **'Ultimate live performances'**
+  String get exploreConcertSub;
+
+  /// No description provided for @exploreConcertQuery.
+  ///
+  /// In en, this message translates to:
+  /// **'live concert performance'**
+  String get exploreConcertQuery;
+
+  /// No description provided for @adminDashboardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'User Statistics'**
+  String get adminDashboardTitle;
+
+  /// No description provided for @adminUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get adminUser;
+
+  /// No description provided for @adminLastSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen'**
+  String get adminLastSeen;
+
+  /// No description provided for @adminLoadingUsers.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading user statistics...'**
+  String get adminLoadingUsers;
+
+  /// No description provided for @adminErrorLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Error loading users: {error}'**
+  String adminErrorLoading(String error);
+
+  /// No description provided for @adminLoginTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'mPlay System Admin'**
+  String get adminLoginTitle;
+
+  /// No description provided for @usernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get usernameLabel;
+
+  /// No description provided for @passwordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get passwordLabel;
+
+  /// No description provided for @adminUsedTimePrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Used: {time}'**
+  String adminUsedTimePrefix(String time);
+
+  /// No description provided for @exploreTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get exploreTitle;
+
+  /// No description provided for @exploreSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find the perfect music for your mood'**
+  String get exploreSubtitle;
 }
 
 class _AppLocalizationsDelegate

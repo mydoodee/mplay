@@ -87,11 +87,20 @@ class MyAudioHandler extends BaseAudioHandler {
       }
     });
 
-    // ตรวจจับการเลื่อนเพลง -> แจ้งเตือน UI ว่าเล่นเพลงไหนอยู่
-    _player.currentIndexStream.listen((index) {
-      if (index != null && index >= 0 && index < queue.value.length) {
-        mediaItem.add(queue.value[index]);
-        _preCacheNextTracksInServer(index);
+    // ตรวจจับการเปลี่ยนเพลงผ่าน sequenceStateStream เพื่อให้ได้ tag (MediaItem) ที่ถูกต้องเสมอ
+    // แก้ปัญหา UI (ตัว select) เด้งไปมาเมื่อ index ของ playlist และ queue ไม่ตรงกันชั่วคราว
+    _player.sequenceStateStream.listen((sequenceState) {
+      if (sequenceState?.currentSource != null) {
+        final tag = sequenceState!.currentSource!.tag;
+        if (tag is MediaItem) {
+          mediaItem.add(tag);
+          
+          // สั่ง pre-cache โดยใช้ index จาก queue (ค้นหาจาก id ปัจจุบัน)
+          final currentIndexInQueue = queue.value.indexWhere((item) => item.id == tag.id);
+          if (currentIndexInQueue != -1) {
+            _preCacheNextTracksInServer(currentIndexInQueue);
+          }
+        }
       }
     });
 
@@ -124,19 +133,35 @@ class MyAudioHandler extends BaseAudioHandler {
 
   void _handlePlaybackError() {
     _cancelLoadingWatchdog();
+    final currentItem = mediaItem.value;
+    if (currentItem == null) return;
+
     Future.delayed(const Duration(seconds: 1), () async {
       if (!_player.playing) {
-        if (kDebugMode) print('🔄 Attempting playback recovery...');
-        // ถ้า player ยังมี source ให้ลอง seek + play ใหม่
-        if (_player.processingState != ProcessingState.idle) {
-          try {
-            await _player.seek(_player.position);
-            await _player.play();
-          } catch (e) {
-            if (kDebugMode) print('❌ Recovery failed: $e');
+        if (kDebugMode) print('🔄 Attempting direct URL recovery for: ${currentItem.id}');
+        try {
+          final directUrl = await ApiService().getAudioUrl(currentItem.id);
+          if (directUrl != null) {
+            final newSource = AudioSource.uri(
+              Uri.parse(directUrl),
+              tag: currentItem,
+              headers: {'User-Agent': 'Mozilla/5.0'},
+            );
+            
+            final index = _player.currentIndex ?? 0;
+            if (index < _playlist.length) {
+              // Replace failing source with direct URL
+              await _playlist.removeAt(index);
+              await _playlist.insert(index, newSource);
+              await _player.seek(Duration.zero, index: index);
+              await _player.play();
+            }
+          } else {
+             if (kDebugMode) print('❌ Direct recovery failed: No direct URL found');
+             await _recoverIdlePlayer();
           }
-        } else {
-          // player เป็น idle จริงๆ ให้ลอง reconnect
+        } catch (e) {
+          if (kDebugMode) print('❌ Direct recovery failed: $e');
           await _recoverIdlePlayer();
         }
       }

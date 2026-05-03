@@ -90,6 +90,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noSongPlaying => 'No song is currently playing';
 
   @override
+  String get nowPlaying => 'Now Playing';
+
+  @override
   String get upNext => 'Up Next';
 
   @override
@@ -274,7 +277,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminOnlineCount(int count) {
-    return 'Online: $count users';
+    return 'Online: $count people';
   }
 
   @override
@@ -282,17 +285,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String adminUsageTime(String time) {
-    return 'Used: $time';
+    return 'Usage time';
   }
 
   @override
   String adminHoursMinutes(int hours, int minutes) {
-    return '$hours hours $minutes minutes';
+    return '$hours h $minutes m';
   }
 
   @override
   String adminMinutes(int minutes) {
-    return '$minutes minutes';
+    return '$minutes m';
   }
 
   @override
@@ -320,7 +323,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addFiles => 'Add Files';
 
   @override
-  String get scanningFiles => 'Scanning files...';
+  String get scanningFiles => 'Scanning music files...';
 
   @override
   String localSongsCount(int count) {
@@ -347,4 +350,138 @@ class AppLocalizationsEn extends AppLocalizations {
   String appVersion(String version) {
     return 'v$version';
   }
+
+  @override
+  String get localMusicTitle => 'Local Music';
+
+  @override
+  String get localMusicSubtitle => 'Add songs from your device or USB Drive';
+
+  @override
+  String get noLocalSongsMessage => 'No local songs yet';
+
+  @override
+  String get tapToAddLocalSongsMessage =>
+      'Tap buttons above to add folders or files';
+
+  @override
+  String get exploreHot => 'Hot Hits';
+
+  @override
+  String exploreHotSub(int year) {
+    return 'Updated hottest hits for $year';
+  }
+
+  @override
+  String exploreHotQuery(Object year) {
+    return 'hottest new songs $year';
+  }
+
+  @override
+  String get exploreRelax => 'Relaxing Cafe';
+
+  @override
+  String get exploreRelaxSub => 'Relaxing music for work';
+
+  @override
+  String exploreRelaxQuery(Object year) {
+    return 'relaxing cafe music $year';
+  }
+
+  @override
+  String get exploreIndie => 'Indie Luk Thung';
+
+  @override
+  String get exploreIndieSub => 'Indie Luk Thung hits 100M views';
+
+  @override
+  String get exploreIndieQuery => 'latest luk thung hits';
+
+  @override
+  String get explorePop => 'Cool Pop';
+
+  @override
+  String get explorePopSub => 'Relaxing international pop';
+
+  @override
+  String explorePopQuery(Object year) {
+    return 'top hits international $year';
+  }
+
+  @override
+  String get exploreRock => 'Rock On';
+
+  @override
+  String get exploreRockSub => 'Every beat packed';
+
+  @override
+  String get exploreRockQuery => 'thai rock 90s to present';
+
+  @override
+  String get exploreSad => 'Sad Vibes';
+
+  @override
+  String get exploreSadSub => 'Heart-touching slow songs';
+
+  @override
+  String exploreSadQuery(Object year) {
+    return 'sad heartbroken songs $year';
+  }
+
+  @override
+  String get exploreDance => 'Dance & Party';
+
+  @override
+  String get exploreDanceSub => 'Wake up the fun';
+
+  @override
+  String exploreDanceQuery(Object year) {
+    return 'dance songs $year party';
+  }
+
+  @override
+  String get exploreConcert => 'Hit Concerts';
+
+  @override
+  String get exploreConcertSub => 'Ultimate live performances';
+
+  @override
+  String get exploreConcertQuery => 'live concert performance';
+
+  @override
+  String get adminDashboardTitle => 'User Statistics';
+
+  @override
+  String get adminUser => 'User';
+
+  @override
+  String get adminLastSeen => 'Last seen';
+
+  @override
+  String get adminLoadingUsers => 'Loading user statistics...';
+
+  @override
+  String adminErrorLoading(String error) {
+    return 'Error loading users: $error';
+  }
+
+  @override
+  String get adminLoginTitle => 'mPlay System Admin';
+
+  @override
+  String get usernameLabel => 'Username';
+
+  @override
+  String get passwordLabel => 'Password';
+
+  @override
+  String adminUsedTimePrefix(String time) {
+    return 'Used: $time';
+  }
+
+  @override
+  String get exploreTitle => 'Explore';
+
+  @override
+  String get exploreSubtitle => 'Find the perfect music for your mood';
 }

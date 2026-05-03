@@ -91,6 +91,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noSongPlaying => 'ไม่มีเพลงที่กำลังเล่นอยู่';
 
   @override
+  String get nowPlaying => 'กำลังเล่น';
+
+  @override
   String get upNext => 'รายการถัดไป';
 
   @override
@@ -283,12 +286,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String adminUsageTime(String time) {
-    return 'ใช้งานแล้ว: $time';
+    return 'เวลาใช้งาน';
   }
 
   @override
   String adminHoursMinutes(int hours, int minutes) {
-    return '$hours ชั่วโมง $minutes นาที';
+    return '$hours ชม. $minutes นาที';
   }
 
   @override
@@ -321,19 +324,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String get addFiles => 'เพิ่มไฟล์';
 
   @override
-  String get scanningFiles => 'กำลังสแกนไฟล์...';
+  String get scanningFiles => 'กำลังอ่านไฟล์เพลง...';
 
   @override
   String localSongsCount(int count) {
-    return '$count เพลงจากเครื่อง';
+    return '$count songs from device';
   }
 
   @override
-  String get noLocalSongs => 'ยังไม่มีเพลงจากเครื่อง';
+  String get noLocalSongs => 'No local songs added yet';
 
   @override
   String get tapToAddLocalSongs =>
-      'แตะ \'เพิ่มโฟลเดอร์\' หรือ \'เพิ่มไฟล์\' เพื่อเพิ่มเพลง';
+      'Tap \'Add Folder\' or \'Add Files\' to add songs';
 
   @override
   String get removeSong => 'ลบเพลง';
@@ -348,4 +351,138 @@ class AppLocalizationsTh extends AppLocalizations {
   String appVersion(String version) {
     return 'v$version';
   }
+
+  @override
+  String get localMusicTitle => 'ไฟล์เพลง';
+
+  @override
+  String get localMusicSubtitle => 'เพิ่มเพลงจากเครื่องหรือ USB Drive ของคุณ';
+
+  @override
+  String get noLocalSongsMessage => 'ยังไม่มีเพลงในเครื่อง';
+
+  @override
+  String get tapToAddLocalSongsMessage =>
+      'กดปุ่มด้านบนเพื่อเพิ่มโฟลเดอร์หรือไฟล์เพลง';
+
+  @override
+  String get exploreHot => 'เพลงฮิตมาแรง';
+
+  @override
+  String exploreHotSub(int year) {
+    return 'อัปเดตเพลงฮิตที่สุด $year';
+  }
+
+  @override
+  String exploreHotQuery(Object year) {
+    return 'เพลงใหม่มาแรง $year';
+  }
+
+  @override
+  String get exploreRelax => 'ชิลๆ ฟีลคาเฟ่';
+
+  @override
+  String get exploreRelaxSub => 'เพลงฟังสบายตอนทำงาน';
+
+  @override
+  String exploreRelaxQuery(Object year) {
+    return 'เพลงฟังสบาย คาเฟ่ $year';
+  }
+
+  @override
+  String get exploreIndie => 'ลูกทุ่งอินดี้';
+
+  @override
+  String get exploreIndieSub => 'เพลงลูกทุ่งยอดฮิต 100 ล้านวิว';
+
+  @override
+  String get exploreIndieQuery => 'เพลงลูกทุ่งฮิตใหม่ล่าสุด';
+
+  @override
+  String get explorePop => 'ป๊อปสากลคูลๆ';
+
+  @override
+  String get explorePopSub => 'เพลงสากลฟังสบาย';
+
+  @override
+  String explorePopQuery(Object year) {
+    return 'เพลงสากลยอดฮิต $year';
+  }
+
+  @override
+  String get exploreRock => 'ร็อกมันส์ๆ';
+
+  @override
+  String get exploreRockSub => 'จัดเต็มทุกจังหวะ';
+
+  @override
+  String get exploreRockQuery => 'เพลงร็อกไทยยุค 90-ปัจจุบัน';
+
+  @override
+  String get exploreSad => 'เศร้าซึม';
+
+  @override
+  String get exploreSadSub => 'เพลงช้ากินใจ';
+
+  @override
+  String exploreSadQuery(Object year) {
+    return 'เพลงเศร้า อกหัก $year';
+  }
+
+  @override
+  String get exploreDance => 'เพลงเต้นตื๊ดๆ';
+
+  @override
+  String get exploreDanceSub => 'ปลุกพลังความสนุก';
+
+  @override
+  String exploreDanceQuery(Object year) {
+    return 'เพลงแดนซ์ $year สายย่อ';
+  }
+
+  @override
+  String get exploreConcert => 'คอนเสิร์ตฮิต';
+
+  @override
+  String get exploreConcertSub => 'การแสดงสดสุดมันส์';
+
+  @override
+  String get exploreConcertQuery => 'บันทึกการแสดงสด คอนเสิร์ต';
+
+  @override
+  String get adminDashboardTitle => 'ผู้ใช้งานระบบ';
+
+  @override
+  String get adminUser => 'ผู้ใช้';
+
+  @override
+  String get adminLastSeen => 'ล่าสุดเมื่อ';
+
+  @override
+  String get adminLoadingUsers => 'กำลังโหลดข้อมูลผู้ใช้...';
+
+  @override
+  String adminErrorLoading(String error) {
+    return 'เกิดข้อผิดพลาดในการโหลดผู้ใช้: $error';
+  }
+
+  @override
+  String get adminLoginTitle => 'แอดมินระบบ mPlay';
+
+  @override
+  String get usernameLabel => 'ชื่อผู้ใช้';
+
+  @override
+  String get passwordLabel => 'รหัสผ่าน';
+
+  @override
+  String adminUsedTimePrefix(String time) {
+    return 'ใช้งานแล้ว: $time';
+  }
+
+  @override
+  String get exploreTitle => 'สำรวจ';
+
+  @override
+  String get exploreSubtitle => 'พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ';
 }

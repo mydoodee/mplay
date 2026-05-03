@@ -37,6 +37,7 @@
   "allSongs": "All Songs",
 
   "noSongPlaying": "No song is currently playing",
+  "nowPlaying": "Now Playing",
   "upNext": "Up Next",
   "currentQueue": "Current Queue",
   "noSongsInQueue": "No songs in queue",
@@ -184,5 +185,82 @@
     "placeholders": {
       "version": {"type": "String"}
     }
-  }
+  },
+  "localMusicTitle": "Local Music",
+  "localMusicSubtitle": "Add songs from your device or USB Drive",
+  "scanningFiles": "Scanning music files...",
+  "noLocalSongsMessage": "No local songs yet",
+  "tapToAddLocalSongsMessage": "Tap buttons above to add folders or files",
+
+  "exploreHot": "Hot Hits",
+  "exploreHotSub": "Updated hottest hits for {year}",
+  "@exploreHotSub": {
+    "placeholders": {
+      "year": {"type": "int"}
+    }
+  },
+  "exploreHotQuery": "hottest new songs {year}",
+  "exploreRelax": "Relaxing Cafe",
+  "exploreRelaxSub": "Relaxing music for work",
+  "exploreRelaxQuery": "relaxing cafe music {year}",
+  "exploreIndie": "Indie Luk Thung",
+  "exploreIndieSub": "Indie Luk Thung hits 100M views",
+  "exploreIndieQuery": "latest luk thung hits",
+  "explorePop": "Cool Pop",
+  "explorePopSub": "Relaxing international pop",
+  "explorePopQuery": "top hits international {year}",
+  "exploreRock": "Rock On",
+  "exploreRockSub": "Every beat packed",
+  "exploreRockQuery": "thai rock 90s to present",
+  "exploreSad": "Sad Vibes",
+  "exploreSadSub": "Heart-touching slow songs",
+  "exploreSadQuery": "sad heartbroken songs {year}",
+  "exploreDance": "Dance & Party",
+  "exploreDanceSub": "Wake up the fun",
+  "exploreDanceQuery": "dance songs {year} party",
+  "exploreConcert": "Hit Concerts",
+  "exploreConcertSub": "Ultimate live performances",
+  "exploreConcertQuery": "live concert performance",
+
+  "adminDashboardTitle": "User Statistics",
+  "adminOnlineCount": "Online: {count} people",
+  "@adminOnlineCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "adminUser": "User",
+  "adminLastSeen": "Last seen",
+  "adminUsageTime": "Usage time",
+  "adminHoursMinutes": "{hours} h {minutes} m",
+  "@adminHoursMinutes": {
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminMinutes": "{minutes} m",
+  "@adminMinutes": {
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+  "adminLoadingUsers": "Loading user statistics...",
+  "adminErrorLoading": "Error loading users: {error}",
+  "@adminErrorLoading": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "adminLoginTitle": "mPlay System Admin",
+  "usernameLabel": "Username",
+  "passwordLabel": "Password",
+  "adminUsedTimePrefix": "Used: {time}",
+  "@adminUsedTimePrefix": {
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "exploreTitle": "Explore",
+  "exploreSubtitle": "Find the perfect music for your mood"
 }

@@ -5,6 +5,7 @@ import '../widgets/app_logo.dart';
 import '../utils/playlist_utils.dart';
 import '../widgets/mini_equalizer.dart';
 import '../utils/responsive.dart';
+import '../l10n/app_localizations.dart';
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -36,123 +37,125 @@ class SongTile extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF444444),
-                borderRadius: BorderRadius.circular(2),
+      builder: (ctx) {
+        final l10n = AppLocalizations.of(ctx)!;
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF444444),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
 
-            // Song info header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: song.thumbnailUrl,
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
+              // Song info header
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: song.thumbnailUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            song.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          song.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFFAAAAAA),
-                            fontSize: 12,
+                          const SizedBox(height: 2),
+                          Text(
+                            song.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Color(0xFFAAAAAA),
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
 
-            const Divider(color: Color(0xFF2A2A2A), height: 1),
+              const Divider(color: Color(0xFF2A2A2A), height: 1),
 
-            // Menu items
-            _menuItem(ctx, Icons.play_arrow_rounded, 'เล่นเพลงนี้', () {
-              Navigator.pop(ctx);
-              onTap();
-            }),
-            _menuItem(
-              ctx,
-              Icons.playlist_add_rounded,
-              'เพิ่มลงในเพลย์ลิสต์',
-              () {
+              // Menu items
+              _menuItem(ctx, Icons.play_arrow_rounded, l10n.playSong, () {
                 Navigator.pop(ctx);
-                PlaylistUtils.showAddToPlaylistSheet(context, song);
-              },
-            ),
-
-            _menuItem(
-              ctx,
-              isFavorite
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              isFavorite ? 'ลบออกจากเพลงที่ชอบ' : 'เพิ่มในเพลงที่ชอบ',
-              () {
-                Navigator.pop(ctx);
-                onFavoritePressed();
-              },
-              iconColor: isFavorite ? const Color(0xFFFF4466) : null,
-            ),
-            if (onRemoveFromPlaylist != null)
+                onTap();
+              }),
               _menuItem(
                 ctx,
-                Icons.delete_outline_rounded,
-                'ลบออกจากเพลย์ลิสต์',
+                Icons.playlist_add_rounded,
+                l10n.addToPlaylist,
                 () {
                   Navigator.pop(ctx);
-                  onRemoveFromPlaylist!();
+                  PlaylistUtils.showAddToPlaylistSheet(context, song);
                 },
-                iconColor: const Color(0xFFFF4466),
               ),
-            _menuItem(ctx, Icons.share_rounded, 'แชร์', () {
-              Navigator.pop(ctx);
-            }),
-            _menuItem(ctx, Icons.info_outline_rounded, 'ข้อมูลเพลง', () {
-              Navigator.pop(ctx);
-              _showSongInfo(context);
-            }),
+              _menuItem(
+                ctx,
+                isFavorite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                isFavorite ? l10n.removeFavorite : l10n.addFavorite,
+                () {
+                  Navigator.pop(ctx);
+                  onFavoritePressed();
+                },
+                iconColor: isFavorite ? const Color(0xFFF15A24) : Colors.white,
+              ),
+              if (onRemoveFromPlaylist != null)
+                _menuItem(
+                  ctx,
+                  Icons.playlist_remove_rounded,
+                  l10n.removeFromPlaylist,
+                  () {
+                    Navigator.pop(ctx);
+                    onRemoveFromPlaylist!();
+                  },
+                  iconColor: const Color(0xFFFF4466),
+                ),
+              _menuItem(ctx, Icons.share_rounded, l10n.share, () {
+                Navigator.pop(ctx);
+              }),
+              _menuItem(ctx, Icons.info_outline_rounded, l10n.songInfo, () {
+                Navigator.pop(ctx);
+                _showSongInfo(context);
+              }),
 
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -180,34 +183,32 @@ class SongTile extends StatelessWidget {
   }
 
   void _showSongInfo(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'ข้อมูลเพลง',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          l10n.songInfo,
+          style: const TextStyle(color: Colors.white, fontSize: 18),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _infoRow('ชื่อเพลง', song.title),
-            const SizedBox(height: 8),
-            _infoRow('ศิลปิน', song.artist),
-            const SizedBox(height: 8),
-            _infoRow('ความยาว', _formatDuration(song.duration)),
-            const SizedBox(height: 8),
-            _infoRow('Video ID', song.id),
+            _infoRow(l10n.songTitle, song.title),
+            const SizedBox(height: 12),
+            _infoRow(l10n.artist, song.artist),
+            const SizedBox(height: 12),
+            _infoRow(l10n.duration, _formatDuration(song.duration)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'ปิด',
-              style: TextStyle(color: Color(0xFFF15A24)),
+            child: Text(
+              l10n.close,
+              style: const TextStyle(color: Color(0xFFF15A24)),
             ),
           ),
         ],

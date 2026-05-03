@@ -9,18 +9,18 @@ class EqualizerProvider extends ChangeNotifier {
   final MyAudioHandler audioHandler;
 
   bool _isEqualizerEnabled = true;
-  String _selectedPreset = 'ปกติ';
+  String _selectedPreset = 'normal';
   double _bassBoosterLevel = 0.0;
   List<double> _bandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
   List<double> _customBandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
   final List<String> presets = [
-    'ปกติ',
-    'ป๊อป',
-    'คลาสสิก',
-    'แจ๊ส',
-    'ร็อก',
-    'กำหนดเอง',
+    'normal',
+    'pop',
+    'classic',
+    'jazz',
+    'rock',
+    'custom',
   ];
   final List<String> bands = ['40', '150', '400', '1.2K', '3K', '5K', '12K'];
 
@@ -36,7 +36,16 @@ class EqualizerProvider extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     _isEqualizerEnabled = prefs.getBool('eq_enabled') ?? true;
-    _selectedPreset = prefs.getString('eq_preset') ?? 'ปกติ';
+    _selectedPreset = prefs.getString('eq_preset') ?? 'normal';
+
+    // Migrate old Thai presets if found
+    if (_selectedPreset == 'ปกติ') _selectedPreset = 'normal';
+    else if (_selectedPreset == 'ป๊อป') _selectedPreset = 'pop';
+    else if (_selectedPreset == 'ร็อก') _selectedPreset = 'rock';
+    else if (_selectedPreset == 'แจ๊ส') _selectedPreset = 'jazz';
+    else if (_selectedPreset == 'คลาสสิก') _selectedPreset = 'classic';
+    else if (_selectedPreset == 'กำหนดเอง') _selectedPreset = 'custom';
+
     _bassBoosterLevel = prefs.getDouble('eq_bass_boost') ?? 0.0;
 
     final savedBands = prefs.getString('eq_bands');
@@ -81,17 +90,17 @@ class EqualizerProvider extends ChangeNotifier {
 
   void setPreset(String preset) {
     _selectedPreset = preset;
-    if (_selectedPreset == 'ปกติ') {
+    if (_selectedPreset == 'normal') {
       _bandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-    } else if (preset == 'ป๊อป') {
+    } else if (preset == 'pop') {
       _bandValues = [-2.0, -1.0, 2.0, 3.0, 4.0, 2.0, -2.0];
-    } else if (preset == 'ร็อก') {
+    } else if (preset == 'rock') {
       _bandValues = [5.0, 4.0, 2.0, -1.0, 2.0, 3.0, 5.0];
-    } else if (preset == 'แจ๊ส') {
+    } else if (preset == 'jazz') {
       _bandValues = [3.0, 2.0, 1.0, -1.0, 1.0, 2.0, 4.0];
-    } else if (preset == 'คลาสสิก') {
+    } else if (preset == 'classic') {
       _bandValues = [4.0, 3.0, 2.0, -2.0, -1.0, 3.0, 4.0];
-    } else if (preset == 'กำหนดเอง') {
+    } else if (preset == 'custom') {
       _bandValues = List.from(_customBandValues);
     }
     notifyListeners();
@@ -101,7 +110,7 @@ class EqualizerProvider extends ChangeNotifier {
   void setBandValue(int index, double value) {
     _bandValues[index] = value;
     _customBandValues[index] = value;
-    _selectedPreset = 'กำหนดเอง';
+    _selectedPreset = 'custom';
     notifyListeners();
     saveSettings();
   }

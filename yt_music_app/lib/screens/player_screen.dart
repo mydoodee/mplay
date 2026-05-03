@@ -10,6 +10,7 @@ import '../utils/playlist_utils.dart';
 import '../utils/responsive.dart';
 import '../widgets/song_tile.dart';
 import '../models/song.dart';
+import '../l10n/app_localizations.dart';
 
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({super.key});
@@ -23,16 +24,17 @@ class PlayerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final songProvider = Provider.of<SongProvider>(context);
     final currentSong = songProvider.currentSong;
 
     if (currentSong == null) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
         body: Center(
           child: Text(
-            "ไม่มีเพลงที่กำลังเล่นอยู่",
-            style: TextStyle(color: Color(0xFF666666)),
+            l10n.noSongPlaying,
+            style: const TextStyle(color: Color(0xFF666666)),
           ),
         ),
       );
@@ -74,23 +76,31 @@ class PlayerScreen extends StatelessWidget {
           Positioned.fill(
             child: currentSong.isLocal
                 ? (currentSong.coverArtBytes != null
-                    ? Image.memory(
-                        currentSong.coverArtBytes!,
-                        fit: BoxFit.cover,
-                      )
-                    : Container(
-                        color: const Color(0xFF0D0D0D),
-                        child: const Center(
-                          child: AppLogo(size: 100, showText: false, color: Colors.white24),
-                        ),
-                      ))
+                      ? Image.memory(
+                          currentSong.coverArtBytes!,
+                          fit: BoxFit.cover,
+                        )
+                      : Container(
+                          color: const Color(0xFF0D0D0D),
+                          child: const Center(
+                            child: AppLogo(
+                              size: 100,
+                              showText: false,
+                              color: Colors.white24,
+                            ),
+                          ),
+                        ))
                 : CachedNetworkImage(
                     imageUrl: currentSong.thumbnailUrl,
                     fit: BoxFit.cover,
                     errorWidget: (context, url, error) => Container(
                       color: const Color(0xFF0D0D0D),
                       child: const Center(
-                        child: AppLogo(size: 100, showText: false, color: Colors.white24),
+                        child: AppLogo(
+                          size: 100,
+                          showText: false,
+                          color: Colors.white24,
+                        ),
                       ),
                     ),
                   ),
@@ -245,38 +255,34 @@ class PlayerScreen extends StatelessWidget {
               aspectRatio: 16 / 9,
               child: currentSong.isLocal
                   ? (currentSong.coverArtBytes != null
-                      ? Image.memory(
-                          currentSong.coverArtBytes!,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          color: const Color(0xFF1A1A1A),
-                          child: const Center(
-                            child: AppLogo(
-                              size: 60,
-                              showText: false,
+                        ? Image.memory(
+                            currentSong.coverArtBytes!,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: const Color(0xFF1A1A1A),
+                            child: const Center(
+                              child: AppLogo(size: 60, showText: false),
                             ),
-                          ),
-                        ))
+                          ))
                   : CachedNetworkImage(
                       imageUrl: currentSong.maxResThumbnailUrl,
                       fit: BoxFit.cover,
                       errorWidget: (context, url, error) => CachedNetworkImage(
                         imageUrl: currentSong.sdThumbnailUrl,
                         fit: BoxFit.cover,
-                        errorWidget: (context, url, secondError) => CachedNetworkImage(
-                          imageUrl: currentSong.hqThumbnailUrl,
-                          fit: BoxFit.cover,
-                          errorWidget: (context, url, thirdError) => Container(
-                            color: const Color(0xFF1A1A1A),
-                            child: const Center(
-                              child: AppLogo(
-                                size: 60,
-                                showText: false,
-                              ),
+                        errorWidget: (context, url, secondError) =>
+                            CachedNetworkImage(
+                              imageUrl: currentSong.hqThumbnailUrl,
+                              fit: BoxFit.cover,
+                              errorWidget: (context, url, thirdError) =>
+                                  Container(
+                                    color: const Color(0xFF1A1A1A),
+                                    child: const Center(
+                                      child: AppLogo(size: 60, showText: false),
+                                    ),
+                                  ),
                             ),
-                          ),
-                        ),
                       ),
                       placeholder: (_, _) => Container(
                         color: const Color(0xFF1A1A1A),
@@ -571,6 +577,7 @@ class PlayerScreen extends StatelessWidget {
   }
 
   Widget _buildBottomRow(BuildContext context, SongProvider songProvider) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: Row(
@@ -583,9 +590,9 @@ class PlayerScreen extends StatelessWidget {
               color: Color(0xFFBBBBBB),
               size: 20,
             ),
-            label: const Text(
-              'รายการถัดไป',
-              style: TextStyle(
+            label: Text(
+              l10n.upNext,
+              style: const TextStyle(
                 color: Color(0xFFBBBBBB),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -596,8 +603,8 @@ class PlayerScreen extends StatelessWidget {
           TextButton.icon(
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('ฟีเจอร์เนื้อเพลงเร็วๆ นี้'),
+                SnackBar(
+                  content: Text(l10n.lyricsComingSoon),
                   behavior: SnackBarBehavior.floating,
                 ),
               );
@@ -607,9 +614,9 @@ class PlayerScreen extends StatelessWidget {
               color: Color(0xFF777777),
               size: 18,
             ),
-            label: const Text(
-              'เนื้อเพลง',
-              style: TextStyle(color: Color(0xFF777777), fontSize: 12),
+            label: Text(
+              l10n.lyrics,
+              style: const TextStyle(color: Color(0xFF777777), fontSize: 12),
             ),
           ),
         ],
@@ -618,6 +625,7 @@ class PlayerScreen extends StatelessWidget {
   }
 
   void _showPlayerMenu(BuildContext context, SongProvider provider, Song song) {
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -643,9 +651,9 @@ class PlayerScreen extends StatelessWidget {
                 Icons.playlist_add_rounded,
                 color: Colors.white,
               ),
-              title: const Text(
-                'เพิ่มลงในเพลย์ลิสต์',
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                l10n.addToPlaylist,
+                style: const TextStyle(color: Colors.white),
               ),
               onTap: () {
                 Navigator.pop(ctx);
@@ -654,9 +662,9 @@ class PlayerScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.share_rounded, color: Colors.white),
-              title: const Text(
-                'แชร์เพลงนี้',
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                l10n.shareSong,
+                style: const TextStyle(color: Colors.white),
               ),
               onTap: () => Navigator.pop(ctx),
             ),
@@ -665,9 +673,9 @@ class PlayerScreen extends StatelessWidget {
                 Icons.info_outline_rounded,
                 color: Colors.white,
               ),
-              title: const Text(
-                'ข้อมูลเพลง',
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                l10n.songInfo,
+                style: const TextStyle(color: Colors.white),
               ),
               onTap: () => Navigator.pop(ctx),
             ),
@@ -680,6 +688,7 @@ class PlayerScreen extends StatelessWidget {
 
   void _showQueueSheet(BuildContext context, SongProvider provider) {
     final isTablet = Responsive.isTablet(context);
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -707,19 +716,19 @@ class PlayerScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     child: Row(
                       children: [
                         Icon(
                           Icons.playlist_play_rounded,
-                          color: Color(0xFFF15A24),
+                          color: const Color(0xFFF15A24),
                           size: 24,
                         ),
                         SizedBox(width: 12),
                         Text(
-                          'รายการเพลงที่เล่นอยู่',
-                          style: TextStyle(
+                          l10n.currentQueue,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -731,10 +740,10 @@ class PlayerScreen extends StatelessWidget {
                   const Divider(color: Color(0xFF222222)),
                   Expanded(
                     child: queue.isEmpty
-                        ? const Center(
+                        ? Center(
                             child: Text(
-                              'ไม่มีเพลงในรายการ',
-                              style: TextStyle(color: Color(0xFF555555)),
+                              l10n.noSongsInQueue,
+                              style: const TextStyle(color: Color(0xFF555555)),
                             ),
                           )
                         : ListView.builder(
