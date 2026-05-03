@@ -120,6 +120,15 @@ class SongProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// ล้างผลการค้นหา
+  void clearSearch() {
+    _searchResults = [];
+    _currentSearchQuery = '';
+    _hasMoreResults = true;
+    _isLoading = false;
+    notifyListeners();
+  }
+
   Future<void> searchMore() async {
     if (_isFetchingMore || !_hasMoreResults || _currentSearchQuery.isEmpty) {
       return;
