@@ -27,14 +27,14 @@ class MyAudioHandler extends BaseAudioHandler {
       ),
       audioLoadConfiguration: AudioLoadConfiguration(
         androidLoadControl: AndroidLoadControl(
-          minBufferDuration: const Duration(minutes: 1),
-          maxBufferDuration: const Duration(minutes: 5),
+          minBufferDuration: const Duration(seconds: 30),
+          maxBufferDuration: const Duration(minutes: 2),
           bufferForPlaybackDuration: const Duration(seconds: 1),
           bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 2),
-          targetBufferBytes: 1024 * 1024 * 30, // 30MB
+          targetBufferBytes: 1024 * 1024 * 10, // 10MB — ลดจาก 30MB เพื่อประหยัด RAM
         ),
         darwinLoadControl: DarwinLoadControl(
-          preferredForwardBufferDuration: const Duration(minutes: 3),
+          preferredForwardBufferDuration: const Duration(minutes: 2),
           automaticallyWaitsToMinimizeStalling: false,
         ),
       ),
@@ -75,9 +75,10 @@ class MyAudioHandler extends BaseAudioHandler {
       );
     });
 
-    // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 4 frame/วิ)
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
-      if (_player.playing) {
+    // เลื่อนเวลาเพลงโชว์ที่จอ UI (ลดโหลด UI เหลือ 2 frame/วิ เพื่อประหยัด CPU)
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (_player.playing &&
+          _player.processingState == ProcessingState.ready) {
         playbackState.add(
           playbackState.value.copyWith(
             updatePosition: _player.position,
@@ -332,9 +333,9 @@ class MyAudioHandler extends BaseAudioHandler {
     List<MediaItem> items,
     int initialIndex,
   ) async {
-    // 🚀 พยายามดึง direct URL ล่วงหน้า 10 เพลงถัดไปเพื่อข้าม Redirect
+    // Pre-cache แค่ 3 เพลงถัดไป (ลดจาก 10 เพื่อประหยัด Network/CPU)
     final List<String> nextBatchIds = [];
-    for (int i = initialIndex + 1; i < songs.length && i < initialIndex + 11; i++) {
+    for (int i = initialIndex + 1; i < songs.length && i < initialIndex + 4; i++) {
       if (!songs[i].isLocal) nextBatchIds.add(songs[i].id);
     }
 

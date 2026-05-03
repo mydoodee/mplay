@@ -81,13 +81,13 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
           _finishWithResult(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 10),
-      pauseFor: const Duration(seconds: 2),
+      listenFor: const Duration(seconds: 20),  // รอนานขึ้น (จาก 10 → 20 วิ)
+      pauseFor: const Duration(seconds: 4),    // รอเงียบนานขึ้น (จาก 2 → 4 วิ) เพื่อภาษาไทย
       localeId: Localizations.localeOf(context).toString(),
       listenOptions: SpeechListenOptions(
         partialResults: true,
-        cancelOnError: true,
-        listenMode: ListenMode.confirmation,
+        cancelOnError: false,               // ไม่ตัดทันทีเมื่อ error — ให้ลองใหม่ได้
+        listenMode: ListenMode.search,      // โหมด search เหมาะกับชื่อเพลง/ศิลปิน
       ),
     );
   }

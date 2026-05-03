@@ -183,12 +183,15 @@ class SongProvider with ChangeNotifier {
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
 
-    // 🚀 บันทึกประวัติแบบเบื้องหลัง
+    // 🚀 บันทึกประวัติเฉพาะเพลงที่เล่นจริง (ไม่บันทึกทั้ง queue เพื่อประหยัด DB I/O)
     Future.microtask(() async {
-      for (var song in songs) {
-        await _dbHelper.addToHistory(song);
+      if (songs.isNotEmpty && initialIndex < songs.length) {
+        await _dbHelper.addToHistory(songs[initialIndex]);
+        final alreadyInHistory = _history.any((s) => s.id == songs[initialIndex].id);
+        if (!alreadyInHistory) {
+          await _loadHistory();
+        }
       }
-      await _loadHistory();
     });
   }
 
