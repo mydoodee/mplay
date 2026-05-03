@@ -118,13 +118,29 @@ class MyAudioHandler extends BaseAudioHandler {
       _handlePlaybackError();
     });
 
-    // ตรวจจับ error จาก player โดยตรง
+    // ตรวจจับ state ของ player
     _player.playerStateStream.listen((state) {
-      if (state.processingState == ProcessingState.idle && _isChangingSong == false) {
-        // Player กลับมา idle โดยไม่ได้ตั้งใจ (ไม่ใช่ระหว่างเปลี่ยนเพลง)
-        // รอแล้ว recover
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (_player.processingState == ProcessingState.idle && !_player.playing) {
+      // 🔧 เมื่อ playlist เล่นจบทั้งหมด (completed) — ไม่ต้อง recover ใดๆ
+      if (state.processingState == ProcessingState.completed) {
+        if (kDebugMode) print('⏹️ Playlist completed — all songs done');
+        return;
+      }
+
+      // 🔧 idle ที่ไม่คาดคิด (ไม่ใช่ระหว่างเปลี่ยนเพลง)
+      if (state.processingState == ProcessingState.idle && !_isChangingSong) {
+        Future.delayed(const Duration(milliseconds: 800), () {
+          if (_player.processingState != ProcessingState.idle || _isChangingSong) return;
+          if (_player.playing) return;
+
+          // ลอง advance ไปเพลงถัดไปก่อน
+          final currentIdx = _player.currentIndex ?? 0;
+          final nextIdx = currentIdx + 1;
+          if (nextIdx < queue.value.length) {
+            if (kDebugMode) print('🔄 Idle detected — advancing to next song ($nextIdx)');
+            _safeSkipToIndex(nextIdx);
+          } else {
+            // ไม่มีเพลงถัดไป — ลอง recover เพลงปัจจุบัน
+            if (kDebugMode) print('🔄 Idle detected — recovering current song');
             _recoverIdlePlayer();
           }
         });
@@ -197,6 +213,53 @@ class MyAudioHandler extends BaseAudioHandler {
   void _cancelLoadingWatchdog() {
     _loadingWatchdog?.cancel();
     _loadingWatchdog = null;
+  }
+
+  /// ตรวจสอบและเพิ่ม AudioSource ให้ _playlist ครบถึง targetIndex
+  /// แก้ปัญหา: skip ไปเพลงที่ _playlist ยังไม่มี source → player หยุดทำงาน
+  Future<void> _ensurePlaylistHasIndex(int targetIndex) async {
+    while (_playlist.length <= targetIndex) {
+      final idx = _playlist.length;
+      if (idx >= queue.value.length) break;
+
+      final item = queue.value[idx];
+      final isLocal = item.extras?['isLocal'] == true;
+      final filePath = item.extras?['filePath'] as String?;
+
+      final AudioSource source;
+      if (isLocal && filePath != null) {
+        source = AudioSource.file(filePath, tag: item);
+      } else {
+        source = AudioSource.uri(
+          Uri.parse(ApiConfig.streamUrl(item.id)),
+          tag: item,
+          headers: {'User-Agent': 'Mozilla/5.0'},
+        );
+      }
+      if (kDebugMode) print('➕ Adding missing source at idx=$idx: ${item.title}');
+      await _playlist.add(source);
+    }
+  }
+
+  /// Skip ไปยัง index ที่ต้องการอย่างปลอดภัย
+  /// — ตรวจให้ _playlist มี source พร้อมก่อนเสมอ
+  /// — อัปเดต UI ทันที
+  Future<void> _safeSkipToIndex(int index) async {
+    if (index < 0 || index >= queue.value.length || _isChangingSong) return;
+
+    _isChangingSong = true;
+    mediaItem.add(queue.value[index]); // โชว์ UI ทันที
+
+    try {
+      await _ensurePlaylistHasIndex(index);
+      await _player.seek(Duration.zero, index: index);
+      await _player.play();
+    } catch (e) {
+      if (kDebugMode) print('❌ safeSkipToIndex($index) error: $e');
+      _handlePlaybackError();
+    } finally {
+      _isChangingSong = false;
+    }
   }
 
   Future<void> _preCacheNextTracksInServer(int currentIndex) async {
@@ -381,12 +444,12 @@ class MyAudioHandler extends BaseAudioHandler {
     // insert เพลงก่อน initialIndex ที่ตำแหน่ง 0
     if (initialIndex > 0) {
       await _playlist.insertAll(0, otherSources.sublist(0, initialIndex));
-      // ✅ หลัง insert เพลงก่อน initialIndex index ของเพลงที่เล่นอยู่จะเลื่อนไป
-      // ต้อง seek ไปที่ index ใหม่เพื่อไม่ให้เพลงกระโดด
-      final newIndex = _player.currentIndex ?? 0;
-      // ถ้า player ยังเล่นอยู่ที่เพลงแรก (index 0) ให้ seek ไป initialIndex
-      if (newIndex == 0 || newIndex < initialIndex) {
-        await _player.seek(Duration.zero, index: initialIndex);
+      // 🔧 หลัง insert: seek ไป initialIndex โดยคงตำแหน่งเวลาเดิมไว้
+      // ไม่ reset เป็น Duration.zero เพื่อไม่ให้กระโดดกลับต้นเพลง
+      final currentPosition = _player.position;
+      final currentIdx = _player.currentIndex ?? 0;
+      if (currentIdx < initialIndex) {
+        await _player.seek(currentPosition, index: initialIndex);
       }
     }
     // add เพลงหลัง initialIndex
@@ -407,16 +470,7 @@ class MyAudioHandler extends BaseAudioHandler {
     if (_isChangingSong) return;
     final nextIndex = (_player.currentIndex ?? 0) + 1;
     if (nextIndex < queue.value.length) {
-      _isChangingSong = true;
-      mediaItem.add(queue.value[nextIndex]); // โชว์ใน UI เร็วขึ้น
-      try {
-        await _player.seekToNext();
-      } catch (e) {
-        if (kDebugMode) print('❌ skipToNext error: $e');
-        _handlePlaybackError();
-      } finally {
-        _isChangingSong = false;
-      }
+      await _safeSkipToIndex(nextIndex);
     }
   }
 
@@ -428,16 +482,7 @@ class MyAudioHandler extends BaseAudioHandler {
     } else {
       final prevIndex = (_player.currentIndex ?? 0) - 1;
       if (prevIndex >= 0) {
-        _isChangingSong = true;
-        mediaItem.add(queue.value[prevIndex]); // โชว์ใน UI เร็วขึ้น
-        try {
-          await _player.seekToPrevious();
-        } catch (e) {
-          if (kDebugMode) print('❌ skipToPrevious error: $e');
-          _handlePlaybackError();
-        } finally {
-          _isChangingSong = false;
-        }
+        await _safeSkipToIndex(prevIndex);
       }
     }
   }
@@ -446,17 +491,7 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> skipToQueueItem(int index) async {
     if (_isChangingSong) return;
     if (index >= 0 && index < queue.value.length) {
-      _isChangingSong = true;
-      mediaItem.add(queue.value[index]); // โชว์ใน UI ทันทีที่กดเลือกเพลง
-      try {
-        await _player.seek(Duration.zero, index: index);
-        await _player.play();
-      } catch (e) {
-        if (kDebugMode) print('❌ skipToQueueItem error: $e');
-        _handlePlaybackError();
-      } finally {
-        _isChangingSong = false;
-      }
+      await _safeSkipToIndex(index);
     }
   }
 
