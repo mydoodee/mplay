@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/song.dart';
 import '../services/song_provider.dart';
+import '../l10n/app_localizations.dart';
 
 class PlaylistUtils {
   static void showAddToPlaylistSheet(BuildContext context, Song song) {
@@ -33,9 +34,9 @@ class PlaylistUtils {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const Text(
-                    'เพิ่มลงในเพลย์ลิสต์',
-                    style: TextStyle(
+                  Text(
+                    AppLocalizations.of(context)!.addToPlaylist,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -56,9 +57,9 @@ class PlaylistUtils {
                         color: Color(0xFFF15A24),
                       ),
                     ),
-                    title: const Text(
-                      'สร้างเพลย์ลิสต์ใหม่',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    title: Text(
+                      AppLocalizations.of(context)!.createNewPlaylist,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
                     ),
                     onTap: () {
                       Navigator.pop(ctx);
@@ -70,12 +71,12 @@ class PlaylistUtils {
 
                   Flexible(
                     child: provider.playlists.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 40),
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
                             child: Center(
                               child: Text(
-                                'ยังไม่มีเพลย์ลิสต์',
-                                style: TextStyle(
+                                AppLocalizations.of(context)!.noPlaylists,
+                                style: const TextStyle(
                                   color: Color(0xFF777777),
                                   fontSize: 13,
                                 ),
@@ -130,7 +131,7 @@ class PlaylistUtils {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  '${playlist.songs.length} เพลง',
+                                  AppLocalizations.of(context)!.songCount(playlist.songs.length),
                                   style: const TextStyle(
                                     color: Color(0xFFAAAAAA),
                                     fontSize: 12,
@@ -147,7 +148,7 @@ class PlaylistUtils {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                          'เพิ่มลงใน "${playlist.name}" แล้ว',
+                                          AppLocalizations.of(context)!.addedToPlaylist(playlist.name),
                                           style: const TextStyle(
                                             color: Colors.white,
                                           ),
@@ -182,25 +183,26 @@ class PlaylistUtils {
     Song? song,
   }) {
     final TextEditingController controller = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'สร้างเพลย์ลิสต์ใหม่',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+        title: Text(
+          l10n.createNewPlaylist,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
         ),
         content: TextField(
           controller: controller,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'ชื่อเพลย์ลิสต์',
-            hintStyle: TextStyle(color: Color(0xFF777777)),
-            enabledBorder: UnderlineInputBorder(
+          decoration: InputDecoration(
+            hintText: l10n.playlistNameHint,
+            hintStyle: const TextStyle(color: Color(0xFF666666)),
+            enabledBorder: const UnderlineInputBorder(
               borderSide: BorderSide(color: Color(0xFF444444)),
             ),
-            focusedBorder: UnderlineInputBorder(
+            focusedBorder: const UnderlineInputBorder(
               borderSide: BorderSide(color: Color(0xFFF15A24)),
             ),
           ),
@@ -212,17 +214,17 @@ class PlaylistUtils {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'ยกเลิก',
-              style: TextStyle(color: Color(0xFF777777)),
+            child: Text(
+              l10n.cancel,
+              style: const TextStyle(color: Color(0xFF777777)),
             ),
           ),
           TextButton(
             onPressed: () =>
                 _handleCreateSubmit(ctx, context, provider, controller, song),
-            child: const Text(
-              'สร้าง',
-              style: TextStyle(color: Color(0xFFF15A24)),
+            child: Text(
+              l10n.create,
+              style: const TextStyle(color: Color(0xFFF15A24)),
             ),
           ),
         ],
@@ -256,7 +258,7 @@ class PlaylistUtils {
             ScaffoldMessenger.of(screenContext).showSnackBar(
               SnackBar(
                 content: Text(
-                  'สร้างและเพิ่มลงใน "$name" แล้ว',
+                  AppLocalizations.of(screenContext)!.createdAndAdded(name),
                   style: const TextStyle(color: Colors.white),
                 ),
                 backgroundColor: const Color(0xFFF15A24),

@@ -67,16 +67,16 @@ class SongProvider with ChangeNotifier {
       if (item != null && item.id.isNotEmpty) {
         final isLocal = item.extras?['isLocal'] == true;
         final filePath = item.extras?['filePath'] as String?;
-        
+
         Uint8List? coverArtBytes;
         if (isLocal && filePath != null) {
           // If the song is already in _localSongs, just use its coverArtBytes
           try {
-             final existing = _localSongs.firstWhere((s) => s.id == item.id);
-             coverArtBytes = existing.coverArtBytes;
+            final existing = _localSongs.firstWhere((s) => s.id == item.id);
+            coverArtBytes = existing.coverArtBytes;
           } catch (_) {
-             // Extract on the fly if not in RAM (e.g. played from Playlist/History)
-             coverArtBytes = await _localMusicService.extractCoverArt(filePath);
+            // Extract on the fly if not in RAM (e.g. played from Playlist/History)
+            coverArtBytes = await _localMusicService.extractCoverArt(filePath);
           }
         }
 
@@ -128,24 +128,30 @@ class SongProvider with ChangeNotifier {
     _isFetchingMore = true;
     notifyListeners();
 
-    final currentOffset = _searchResults.length;
-    final moreResults = await _apiService.searchSongs(
-      _currentSearchQuery,
-      limit: _pageSize,
-      offset: currentOffset,
-    );
+    try {
+      final currentOffset = _searchResults.length;
+      final moreResults = await _apiService.searchSongs(
+        _currentSearchQuery,
+        limit: _pageSize,
+        offset: currentOffset,
+      );
 
-    if (moreResults.isEmpty) {
-      _hasMoreResults = false;
-    } else {
-      _searchResults.addAll(moreResults);
-      if (moreResults.length < _pageSize) {
+      if (moreResults.isEmpty) {
         _hasMoreResults = false;
+      } else {
+        _searchResults.addAll(moreResults);
+        if (moreResults.length < _pageSize) {
+          _hasMoreResults = false;
+        }
       }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in searchMore: $e');
+      }
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
     }
-
-    _isFetchingMore = false;
-    notifyListeners();
   }
 
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
@@ -155,9 +161,18 @@ class SongProvider with ChangeNotifier {
       } else {
         await audioHandler?.playSong(song);
       }
-      
-      // 🚀 ทำงานเบื้องหลัง ไม่ต้องรอ (Non-blocking)
-      _dbHelper.addToHistory(song).then((_) => _loadHistory());
+
+      // 🚀 อัปเดต history ใน DB แบบ background
+      // แต่ถ้าเพลงนี้มีอยู่ใน list แล้ว ให้คงลำดับเดิมไว้ ไม่ reload ใหม่
+      // เพื่อไม่ให้เพลงที่เล่นเด้งขึ้นบนสุด
+      _dbHelper.addToHistory(song).then((_) {
+        final alreadyInHistory = _history.any((s) => s.id == song.id);
+        if (!alreadyInHistory) {
+          // เพลงใหม่ที่ไม่เคยเล่นมาก่อน → reload เพื่อเพิ่มขึ้นบนสุด
+          _loadHistory();
+        }
+        // เพลงที่มีอยู่แล้ว → ไม่ต้อง reload เพราะ isPlaying จะอัปเดตผ่าน audioHandler listener อยู่แล้ว
+      });
     } catch (e) {
       if (kDebugMode) {
         print('DB/Audio Error in playSong: $e');
@@ -167,7 +182,7 @@ class SongProvider with ChangeNotifier {
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
-    
+
     // 🚀 บันทึกประวัติแบบเบื้องหลัง
     Future.microtask(() async {
       for (var song in songs) {
@@ -187,32 +202,42 @@ class SongProvider with ChangeNotifier {
   Future<void> playPrevious() async => audioHandler?.skipToPrevious();
 
   Future<void> _loadFavorites() async {
-    final rawFavorites = await _dbHelper.getFavorites();
-    final validFavorites = <Song>[];
-    for (final song in rawFavorites) {
-      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
-        await _dbHelper.removeFavorite(song.id);
-      } else {
-        validFavorites.add(song);
+    try {
+      final rawFavorites = await _dbHelper.getFavorites();
+      final validFavorites = <Song>[];
+      for (final song in rawFavorites) {
+        if (song.id.startsWith('local_') &&
+            (song.filePath == null || song.filePath!.isEmpty)) {
+          await _dbHelper.removeFavorite(song.id);
+        } else {
+          // โหลด cover art สำหรับเพลง local ใน favorites
+          validFavorites.add(await _withCoverArt(song));
+        }
       }
+      _favorites = validFavorites;
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Error loading favorites: $e');
     }
-    _favorites = validFavorites;
-    notifyListeners();
   }
 
   Future<void> _loadHistory() async {
-    final rawHistory = await _dbHelper.getHistory();
-    final validHistory = <Song>[];
-    for (final song in rawHistory) {
-      if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
-        await _dbHelper.removeFromHistory(song.id);
-      } else {
-        // ถ้าเป็นไฟล์ local ให้โหลด cover art จากไฟล์
-        validHistory.add(await _withCoverArt(song));
+    try {
+      final rawHistory = await _dbHelper.getHistory();
+      final validHistory = <Song>[];
+      for (final song in rawHistory) {
+        if (song.id.startsWith('local_') &&
+            (song.filePath == null || song.filePath!.isEmpty)) {
+          await _dbHelper.removeFromHistory(song.id);
+        } else {
+          validHistory.add(await _withCoverArt(song));
+        }
       }
+      _history = validHistory;
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Error loading history: $e');
     }
-    _history = validHistory;
-    notifyListeners();
   }
 
   /// โหลด coverArtBytes จากไฟล์ถ้าเป็นเพลง local
@@ -239,13 +264,17 @@ class SongProvider with ChangeNotifier {
   }
 
   Future<void> toggleFavorite(Song song) async {
-    final isFav = await _dbHelper.isFavorite(song.id);
-    if (isFav) {
-      await _dbHelper.removeFavorite(song.id);
-    } else {
-      await _dbHelper.addFavorite(song);
+    try {
+      final isFav = await _dbHelper.isFavorite(song.id);
+      if (isFav) {
+        await _dbHelper.removeFavorite(song.id);
+      } else {
+        await _dbHelper.addFavorite(song);
+      }
+      await _loadFavorites();
+    } catch (e) {
+      if (kDebugMode) print('Error toggling favorite: $e');
     }
-    await _loadFavorites();
   }
 
   Future<bool> isFavorite(String videoId) async {
@@ -255,42 +284,64 @@ class SongProvider with ChangeNotifier {
   // ─── Playlists ───
 
   Future<void> _loadPlaylists() async {
-    final maps = await _dbHelper.getPlaylists();
-    _playlists = maps.map((m) => Playlist.fromMap(m)).toList();
-    for (var playlist in _playlists) {
-      final rawSongs = await _dbHelper.getSongsForPlaylist(playlist.id);
-      final validSongs = <Song>[];
-      for (final song in rawSongs) {
-        if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
-          await _dbHelper.removeSongFromPlaylist(playlist.id, song.id);
-        } else {
-          validSongs.add(song);
+    try {
+      final maps = await _dbHelper.getPlaylists();
+      _playlists = maps.map((m) => Playlist.fromMap(m)).toList();
+      for (var playlist in _playlists) {
+        final rawSongs = await _dbHelper.getSongsForPlaylist(playlist.id);
+        final validSongs = <Song>[];
+        for (final song in rawSongs) {
+          if (song.id.startsWith('local_') &&
+              (song.filePath == null || song.filePath!.isEmpty)) {
+            await _dbHelper.removeSongFromPlaylist(playlist.id, song.id);
+          } else {
+            // โหลด cover art สำหรับเพลง local ใน playlists
+            validSongs.add(await _withCoverArt(song));
+          }
         }
+        playlist.songs = validSongs;
       }
-      playlist.songs = validSongs;
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) print('Error loading playlists: $e');
     }
-    notifyListeners();
   }
 
   Future<void> createNewPlaylist(String name) async {
-    if (name.trim().isEmpty) return;
-    await _dbHelper.createPlaylist(name.trim());
-    await _loadPlaylists();
+    try {
+      if (name.trim().isEmpty) return;
+      await _dbHelper.createPlaylist(name.trim());
+      await _loadPlaylists();
+    } catch (e) {
+      if (kDebugMode) print('Error creating playlist: $e');
+    }
   }
 
   Future<void> deletePlaylist(int id) async {
-    await _dbHelper.deletePlaylist(id);
-    await _loadPlaylists();
+    try {
+      await _dbHelper.deletePlaylist(id);
+      await _loadPlaylists();
+    } catch (e) {
+      if (kDebugMode) print('Error deleting playlist: $e');
+    }
   }
 
   Future<void> addSongToPlaylist(int playlistId, Song song) async {
-    await _dbHelper.addSongToPlaylist(playlistId, song);
-    await _loadPlaylists();
+    try {
+      await _dbHelper.addSongToPlaylist(playlistId, song);
+      await _loadPlaylists();
+    } catch (e) {
+      if (kDebugMode) print('Error adding song to playlist: $e');
+    }
   }
 
   Future<void> removeSongFromPlaylist(int playlistId, String videoId) async {
-    await _dbHelper.removeSongFromPlaylist(playlistId, videoId);
-    await _loadPlaylists();
+    try {
+      await _dbHelper.removeSongFromPlaylist(playlistId, videoId);
+      await _loadPlaylists();
+    } catch (e) {
+      if (kDebugMode) print('Error removing song from playlist: $e');
+    }
   }
 
   // ─── Local Music ───
