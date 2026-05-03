@@ -32,8 +32,8 @@ class HeartbeatService {
     // Send immediately on init
     _sendHeartbeat();
 
-    // Send every 1 minute
-    _timer = Timer.periodic(const Duration(minutes: 1), (timer) {
+    // Send every 5 minutes (ลดจาก 1 นาที เพื่อประหยัด battery/network)
+    _timer = Timer.periodic(const Duration(minutes: 5), (timer) {
       _sendHeartbeat();
     });
   }
