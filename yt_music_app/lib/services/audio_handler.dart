@@ -354,6 +354,12 @@ class MyAudioHandler extends BaseAudioHandler {
     // 🚀 อัพเดท UI ทันทีไม่ต้องรอโหลด
     mediaItem.add(item);
 
+    // ℹ️ Log เพลงที่ duration = 0 (อาจเป็น live stream หรือ API ไม่ส่ง duration)
+    // ไม่ block — ปล่อยให้เล่นปกติ โดยมี timeout 15 วิ ป้องกันค้าง
+    if (!song.isLocal && song.duration == 0) {
+      if (kDebugMode) print('ℹ️ Song has no duration (may be live): ${song.title}');
+    }
+
     if (existingIndex != -1) {
       // มีอยู่ในคิวแล้ว seek + play ทันที
       _startChangingSongGuard();
@@ -376,20 +382,43 @@ class MyAudioHandler extends BaseAudioHandler {
       if (song.isLocal && song.filePath != null) {
         source = AudioSource.file(song.filePath!, tag: item);
       } else {
+        // 🔴 เพลงที่ duration = 0 (live/unknown) → ลอง direct URL ก่อน
+        // เพราะ server proxy อาจไม่รองรับ live stream
+        String streamUri = ApiConfig.streamUrl(song.id);
+        if (song.duration == 0) {
+          if (kDebugMode) print('🔗 Trying direct URL for duration=0 song...');
+          try {
+            final directUrl = await ApiService().getAudioUrl(song.id)
+                .timeout(const Duration(seconds: 10));
+            if (directUrl != null && directUrl.isNotEmpty) {
+              streamUri = directUrl;
+              if (kDebugMode) print('✅ Got direct URL for live/unknown song');
+            }
+          } catch (e) {
+            if (kDebugMode) print('⚠️ Direct URL failed, using proxy: $e');
+          }
+        } else {
+          // เพลงปกติ → pre-cache URL ใน background
+          ApiService().getAudioUrl(song.id).catchError((_) => null);
+        }
         source = AudioSource.uri(
-          Uri.parse(ApiConfig.streamUrl(song.id)),
+          Uri.parse(streamUri),
           tag: item,
           headers: {'User-Agent': 'Mozilla/5.0'},
         );
-        ApiService().getAudioUrl(song.id).catchError((_) => null);
       }
 
       _startChangingSongGuard();
       try {
-        await _playlist.add(source);
-        await _player.seek(Duration.zero, index: targetIndex);
-        await _player.play();
-        // ลบ source เก่าถ้า queue ใหญ่เกินไป
+        // ⏱ Timeout 15 วินาที — ถ้า add+seek+play ไม่สำเร็จใน 15 วิ ให้ skip
+        await Future(() async {
+          await _playlist.add(source);
+          await _player.seek(Duration.zero, index: targetIndex);
+          await _player.play();
+        }).timeout(const Duration(seconds: 15), onTimeout: () {
+          if (kDebugMode) print('⏱ playSong timeout — source may be live/broken');
+          _forceResetIfStuck();
+        });
         unawaited(_trimOldSources());
       } catch (e) {
         if (kDebugMode) print('❌ Playback error in playSong: $e');
