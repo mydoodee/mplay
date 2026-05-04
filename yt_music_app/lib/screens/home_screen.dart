@@ -759,11 +759,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     isPlaying: song.id == currentSong?.id,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
-                    onTap: () => songProvider.playSong(
-                      song,
-                      queue: results,
-                      index: results.indexOf(song),
-                    ),
+                    onTap: () => songProvider.playSong(song),
                   ),
                 ),
               ),

@@ -8,8 +8,30 @@ import '../screens/player_screen.dart';
 import '../widgets/app_logo.dart';
 import '../utils/responsive.dart';
 
-class MiniPlayer extends StatelessWidget {
+class MiniPlayer extends StatefulWidget {
   const MiniPlayer({super.key});
+
+  @override
+  State<MiniPlayer> createState() => _MiniPlayerState();
+}
+
+class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateMixin {
+  late AnimationController _shimmerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _shimmerController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,6 +58,9 @@ class MiniPlayer extends StatelessWidget {
         final processingState =
             playbackState?.processingState ?? AudioProcessingState.idle;
 
+        final isBuffering = processingState == AudioProcessingState.loading ||
+            processingState == AudioProcessingState.buffering;
+
         double progress = 0.0;
         if (duration.inMilliseconds > 0) {
           progress = position.inMilliseconds / duration.inMilliseconds;
@@ -55,6 +80,16 @@ class MiniPlayer extends StatelessWidget {
                     },
               ),
             );
+          },
+          // 🎯 Swipe left/right เพื่อเปลี่ยนเพลง
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity != null) {
+              if (details.primaryVelocity! < -300) {
+                audioHandler?.skipToNext();
+              } else if (details.primaryVelocity! > 300) {
+                audioHandler?.skipToPrevious();
+              }
+            }
           },
           child: Container(
             height: playerHeight,
@@ -92,6 +127,30 @@ class MiniPlayer extends StatelessWidget {
                       ),
                     ),
                   ),
+
+                  // ✨ Shimmer overlay ตอน buffering
+                  if (isBuffering)
+                    Positioned.fill(
+                      child: AnimatedBuilder(
+                        animation: _shimmerController,
+                        builder: (_, _) {
+                          return Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(isTablet ? 20 : 14),
+                              gradient: LinearGradient(
+                                begin: Alignment(-1.0 + 2.0 * _shimmerController.value, 0),
+                                end: Alignment(-0.5 + 2.0 * _shimmerController.value, 0),
+                                colors: [
+                                  Colors.transparent,
+                                  const Color(0xFFF15A24).withValues(alpha: 0.08),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
 
                   // Content
                   Padding(
@@ -164,54 +223,69 @@ class MiniPlayer extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                currentSong.artist,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: const Color(0xFFAAAAAA),
-                                  fontSize: artistFontSize,
-                                  fontWeight: FontWeight.w400,
-                                ),
+                              Row(
+                                children: [
+                                  if (isBuffering) ...[
+                                    SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: const Color(0xFFF15A24).withValues(alpha: 0.7),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      isBuffering ? 'กำลังโหลด...' : currentSong.artist,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isBuffering
+                                            ? const Color(0xFFF15A24).withValues(alpha: 0.7)
+                                            : const Color(0xFFAAAAAA),
+                                        fontSize: artistFontSize,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
 
                         // Controls
-                        if (processingState == AudioProcessingState.loading ||
-                            processingState == AudioProcessingState.buffering)
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: SizedBox(
-                              width: isTablet ? 26 : 22,
-                              height: isTablet ? 26 : 22,
-                              child: const CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFFF15A24),
-                              ),
-                            ),
-                          )
-                        else
-                          IconButton(
-                            icon: Icon(
-                              playing
-                                  ? Icons.pause_rounded
-                                  : Icons.play_arrow_rounded,
-                              color: Colors.white,
-                              size: isTablet ? 34 : 28,
-                            ),
-                            onPressed: () {
-                              if (playing) {
-                                audioHandler?.pause();
-                              } else {
-                                if (processingState == AudioProcessingState.completed) {
-                                  audioHandler?.seek(Duration.zero);
-                                }
-                                audioHandler?.play();
+                        IconButton(
+                          icon: isBuffering
+                              ? SizedBox(
+                                  width: isTablet ? 26 : 22,
+                                  height: isTablet ? 26 : 22,
+                                  child: const CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFFF15A24),
+                                  ),
+                                )
+                              : Icon(
+                                  playing
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: isTablet ? 34 : 28,
+                                ),
+                          onPressed: () {
+                            if (isBuffering) return;
+                            if (playing) {
+                              audioHandler?.pause();
+                            } else {
+                              if (processingState == AudioProcessingState.completed) {
+                                audioHandler?.seek(Duration.zero);
                               }
-                            },
-                          ),
+                              audioHandler?.play();
+                            }
+                          },
+                        ),
                         IconButton(
                           icon: Icon(
                             Icons.skip_next_rounded,
