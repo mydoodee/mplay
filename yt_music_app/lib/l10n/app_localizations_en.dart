@@ -273,6 +273,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceListening => 'Listening...';
 
   @override
+  String get voiceTapToStop => 'Tap to stop';
+
+  @override
   String get adminSystemUsers => 'System Users';
 
   @override
