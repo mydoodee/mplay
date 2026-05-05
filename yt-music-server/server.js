@@ -13,15 +13,16 @@ const PORT = process.env.PORT || 3456;
 // 🔧 Config
 // ============================================
 const CONFIG = {
-  CACHE_TTL: 25 * 60 * 1000,      // 25 นาที — URL cache
+  CACHE_TTL: 25 * 60 * 1000,           // 25 นาที — URL cache (เพลงปกติ)
+  LIVE_CACHE_TTL: 3 * 60 * 1000,       // 3 นาที — Live URL หมดอายุเร็วกว่ามาก
   CACHE_MAX: 500,
   CACHE_SWEEP: 50,
-  SEARCH_CACHE_TTL: 10 * 60 * 1000, // 10 นาที — Search cache
+  SEARCH_CACHE_TTL: 10 * 60 * 1000,   // 10 นาที — Search cache
   SEARCH_CACHE_MAX: 100,
-  BATCH_MAX: 3,                    // 🔧 ลดจาก 15 → 3 เพื่อประหยัด CPU บน QNAP
+  BATCH_MAX: 3,                         // 🔧 ลดจาก 15 → 3 เพื่อประหยัด CPU บน QNAP
   YTDLP_TIMEOUT: 30_000,
   MAX_REDIRECTS: 5,
-  MAX_CONCURRENT_YTDLP: 2,        // 🔧 จำกัด yt-dlp สูงสุด 2 ตัวพร้อมกัน
+  MAX_CONCURRENT_YTDLP: 2,             // 🔧 จำกัด yt-dlp สูงสุด 2 ตัวพร้อมกัน
   LOG: process.env.LOG === "true",
 };
 
@@ -81,15 +82,17 @@ const pendingResolutions = new Map();
 
 function getCachedUrl(videoId) {
   const cached = urlCache.get(videoId);
-  if (cached && Date.now() - cached.timestamp < CONFIG.CACHE_TTL) {
-    return cached.url;
+  if (!cached) return null;
+  const ttl = cached.isLive ? CONFIG.LIVE_CACHE_TTL : CONFIG.CACHE_TTL;
+  if (Date.now() - cached.timestamp < ttl) {
+    return cached;
   }
   urlCache.delete(videoId);
   return null;
 }
 
-function setCachedUrl(videoId, url) {
-  urlCache.set(videoId, { url, timestamp: Date.now() });
+function setCachedUrl(videoId, url, isLive = false, isHls = false) {
+  urlCache.set(videoId, { url, isLive, isHls, timestamp: Date.now() });
   if (urlCache.size > CONFIG.CACHE_MAX) {
     const keys = urlCache.keys();
     for (let i = 0; i < CONFIG.CACHE_SWEEP; i++) {
@@ -165,11 +168,12 @@ async function runYtDlpLimited(args, timeoutMs = CONFIG.YTDLP_TIMEOUT) {
 
 // ============================================
 // Helper: Get audio URL (shared logic)
+// Returns: { url, isLive, isHls } or null
 // ============================================
 async function resolveAudioUrl(videoId) {
   // 1. Check Cache
-  let audioUrl = getCachedUrl(videoId);
-  if (audioUrl) return audioUrl;
+  const cachedEntry = getCachedUrl(videoId);
+  if (cachedEntry) return cachedEntry;
 
   // 2. Check if already resolving (Request Coalescing)
   if (pendingResolutions.has(videoId)) {
@@ -177,27 +181,41 @@ async function resolveAudioUrl(videoId) {
     return pendingResolutions.get(videoId);
   }
 
-  // 3. Resolve using yt-dlp (จำกัดด้วย Semaphore)
+  // 3. Resolve using yt-dlp — ดึง is_live ด้วย
   const resolutionPromise = (async () => {
     try {
-      const args = [
+      // ดึง JSON metadata เพื่อตรวจ is_live + hls_manifest_url
+      const infoArgs = [
         `https://www.youtube.com/watch?v=${videoId}`,
-        "-f",
-        "ba[ext=m4a]/ba/b",
-        "-g",
         "--no-warnings",
         "--no-playlist",
         "--no-check-certificates",
         "--no-cache-dir",
+        "--print",
+        "%(is_live)s\t%(live_status)s\t%(url)s\t%(hls_manifest_url)s",
+        "-f",
+        "ba[ext=m4a]/ba/b",
       ];
 
-      let url = await runYtDlpLimited(args);
-      url = url.split("\n")[0].trim();
+      let output = await runYtDlpLimited(infoArgs);
+      output = output.split("\n")[0].trim();
+      const parts = output.split("\t");
 
-      if (url) {
-        setCachedUrl(videoId, url);
-        log.info(`✅ Resolved & cached: ${videoId}`);
-        return url;
+      const rawIsLive = parts[0] || "";
+      const liveStatus = parts[1] || "";
+      const directUrl = (parts[2] || "").trim();
+      const hlsUrl = (parts[3] || "").trim();
+
+      // ตรวจว่าเป็น live หรือไม่
+      const isLive = rawIsLive === "True" || liveStatus === "is_live" || liveStatus === "is_upcoming";
+      const isHls = isLive && hlsUrl && hlsUrl.startsWith("http");
+
+      const finalUrl = isHls ? hlsUrl : directUrl;
+
+      if (finalUrl) {
+        setCachedUrl(videoId, finalUrl, isLive, isHls);
+        log.info(`✅ Resolved: ${videoId} isLive=${isLive} isHls=${isHls}`);
+        return { url: finalUrl, isLive, isHls };
       }
       return null;
     } catch (err) {
@@ -282,6 +300,7 @@ app.get("/api/search", async (req, res) => {
               artist: artist || "ไม่ระบุชื่อศิลปิน",
               duration: parseInt(duration) || 0,
               thumbnail: thumb,
+              isLive: duration === "0" || duration === "None", // yt-dlp คืน 0/None สำหรับ live
             };
           })
           .filter(Boolean);
@@ -349,6 +368,7 @@ app.get("/api/info/:videoId", async (req, res) => {
       duration: parseInt(duration) || 0,
       thumbnail: thumb,
       viewCount: parseInt(viewCount) || 0,
+      isLive: duration === "0" || duration === "None",
     });
   } catch (error) {
     log.error("Info error:", error.message);
@@ -370,13 +390,49 @@ app.get("/api/stream/:videoId", async (req, res) => {
 
     log.info(`🎵 Streaming: ${videoId}`);
 
-    const audioUrl = await resolveAudioUrl(videoId);
-    if (!audioUrl) {
+    const resolved = await resolveAudioUrl(videoId);
+    if (!resolved) {
       return res.status(404).json({ error: "No audio stream found" });
     }
 
-    log.info(`🔗 Audio URL resolved for: ${videoId}`);
+    const { url: audioUrl, isLive, isHls } = resolved;
+    log.info(`🔗 Audio URL resolved for: ${videoId} (isLive=${isLive})`);
 
+    // 🔴 Live/HLS: proxy manifest พร้อม Content-Type ที่ถูกต้อง
+    // ไม่ใช้ redirect เพราะ ExoPlayer รู้จัก HLS จาก Content-Type หรือ .m3u8 extension
+    // YouTube HLS URL ไม่ลงท้าย .m3u8 ดังนั้นต้อง proxy ต้องกำหนด Content-Type เอง
+    if (isLive || isHls) {
+      log.info(`📡 Live stream — proxying HLS manifest: ${videoId}`);
+      const parsedHlsUrl = new URL(audioUrl);
+      const hlsProtocol = parsedHlsUrl.protocol === "https:" ? https : http;
+      const hlsReq = hlsProtocol.get(
+        audioUrl,
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Encoding": "identity",  // ป้องกัน GZIP double-decode
+          },
+        },
+        (hlsRes) => {
+          if (!res.headersSent) {
+            // ตั้ง Content-Type เพื่อให้ ExoPlayer รู้จักว่าเป็น HLS
+            res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Cache-Control", "no-cache");
+            res.status(200);
+            hlsRes.pipe(res);
+          }
+        }
+      );
+      hlsReq.on("error", (err) => {
+        log.error("HLS proxy error:", err.message);
+        if (!res.headersSent) res.status(500).json({ error: "HLS proxy failed" });
+      });
+      req.on("close", () => hlsReq.destroy());
+      return;
+    }
+
+    // ปกติ: proxy เหมือนเดิม
     const proxyStream = (url, depth = 0) => {
       if (depth > CONFIG.MAX_REDIRECTS) {
         if (!res.headersSent)
@@ -456,12 +512,17 @@ app.get("/api/audio-url/:videoId", async (req, res) => {
 
     log.info(`🔗 Getting audio URL: ${videoId}`);
 
-    const audioUrl = await resolveAudioUrl(videoId);
-    if (!audioUrl) {
+    const resolved = await resolveAudioUrl(videoId);
+    if (!resolved) {
       return res.status(404).json({ error: "No audio URL found" });
     }
 
-    res.json({ url: audioUrl });
+    // ส่ง isLive + isHls กลับไปให้ Flutter App ตัดสินใจ
+    res.json({
+      url: resolved.url,
+      isLive: resolved.isLive || false,
+      isHls: resolved.isHls || false,
+    });
   } catch (error) {
     log.error("Audio URL error:", error.message);
     res.status(500).json({ error: "Failed to get audio URL" });
