@@ -17,6 +17,7 @@ import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
 import '../widgets/voice_search_button.dart';
+import '../widgets/voice_search_dialog.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
 import '../l10n/app_localizations.dart';
@@ -143,12 +144,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    // หน่วงเวลา 1 วินาทีหลังจากพิมพ์ตัวอักษรตัวสุดท้ายเสร็จ ถึงจะเริ่มค้นหา
-    _debounce = Timer(const Duration(milliseconds: 1000), () {
+    
+    // Fetch suggestions more quickly (500ms)
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).search(query);
+        Provider.of<SongProvider>(context, listen: false).fetchSuggestions(query);
+      } else {
+        Provider.of<SongProvider>(context, listen: false).clearSuggestions();
       }
     });
+
+    // Actual search still takes 1000ms if you stop typing
+    // (or we can let user press Enter/Search button)
+    // For now, let's keep it as is or improve it.
+  }
+
+  void _performSearch(String query) {
+    if (query.isEmpty) return;
+    _debounce?.cancel();
+    _searchController.text = query;
+    _searchController.selection = TextSelection.fromPosition(
+      TextPosition(offset: query.length),
+    );
+    Provider.of<SongProvider>(context, listen: false).search(query);
+    // Hide keyboard and suggestions
+    FocusScope.of(context).unfocus();
+    Provider.of<SongProvider>(context, listen: false).clearSuggestions();
   }
 
   @override
@@ -315,6 +336,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
+              onSubmitted: _performSearch,
+              textInputAction: TextInputAction.search,
               textAlignVertical: TextAlignVertical.center,
               style: TextStyle(
                 color: Colors.white,
@@ -362,16 +385,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: VoiceSearchButton(
-                        onListenStart: () {
-                          setState(() => _listeningText = '');
-                        },
-                        onResult: (text) {
-                          setState(() {
-                            _listeningText = '';
-                            _searchController.text = text;
-                          });
-                          _onSearchChanged(text);
+                      child: IconButton(
+                        icon: const Icon(Icons.mic_rounded, color: Color(0xFF888888), size: 22),
+                        onPressed: () async {
+                          final result = await showGeneralDialog<String>(
+                            context: context,
+                            barrierDismissible: true,
+                            barrierLabel: '',
+                            pageBuilder: (context, _, __) => VoiceSearchDialog(
+                              initialLocale: Localizations.localeOf(context).toString(),
+                            ),
+                          );
+                          if (result != null && result.isNotEmpty) {
+                            _performSearch(result);
+                          }
                         },
                       ),
                     ),
@@ -396,6 +423,45 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+        ),
+        // 🔍 Search Suggestions
+        Consumer<SongProvider>(
+          builder: (context, provider, child) {
+            if (provider.suggestions.isEmpty) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF222222)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: provider.suggestions.length.clamp(0, 8),
+                separatorBuilder: (context, index) => Divider(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                ),
+                itemBuilder: (context, index) {
+                  final suggestion = provider.suggestions[index];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.history_rounded, color: Color(0xFF555555), size: 18),
+                    title: Text(
+                      suggestion,
+                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                    trailing: const Icon(Icons.north_west_rounded, color: Color(0xFF444444), size: 16),
+                    onTap: () => _performSearch(suggestion),
+                  );
+                },
+              ),
+            );
+          },
         ),
         // Real-time voice text hint
         if (_listeningText.isNotEmpty) ...[

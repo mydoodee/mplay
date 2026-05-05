@@ -52,6 +52,44 @@ class ApiService {
     }
   }
 
+  /// 🔍 Fetch search suggestions from YouTube's public API
+  Future<List<String>> getSearchSuggestions(String query) async {
+    if (query.trim().isEmpty) return [];
+    try {
+      final response = await _client.get(
+        Uri.parse(
+          'https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${Uri.encodeComponent(query)}',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        // Response format is typically: window.google.ac.h(["query",[["suggestion1",0],["suggestion2",0]],...])
+        // Or sometimes just JSON: ["query",["suggestion1","suggestion2",...]]
+        final String body = response.body;
+        
+        // Simple regex to extract JSON part if it's wrapped in a callback
+        final jsonMatch = RegExp(r'\[.*\]').firstMatch(body);
+        if (jsonMatch != null) {
+          final List<dynamic> data = json.decode(jsonMatch.group(0)!);
+          if (data.length >= 2 && data[1] is List) {
+            return (data[1] as List).map((e) {
+              if (e is List && e.isNotEmpty) {
+                return e[0].toString(); // Extract just the text from [text, type, ...]
+              }
+              return e.toString();
+            }).toList();
+          }
+        }
+      }
+      return [];
+    } catch (e) {
+      if (kDebugMode) {
+        print('ApiService Error (Suggestions): $e');
+      }
+      return [];
+    }
+  }
+
   Future<Song?> getSongInfo(String videoId) async {
     try {
       final response = await _client
