@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/equalizer_provider.dart';
+import '../l10n/app_localizations.dart';
 
 class EqualizerScreen extends StatelessWidget {
   const EqualizerScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // If EqualizerProvider is null (e.g. audioHandler failed), show error
     final eqProvider = Provider.of<EqualizerProvider?>(context);
 
@@ -15,12 +17,12 @@ class EqualizerScreen extends StatelessWidget {
         backgroundColor: Colors.black,
         appBar: AppBar(
           backgroundColor: Colors.black,
-          title: const Text('Equalizer'),
+          title: Text(l10n.eqTitle),
         ),
-        body: const Center(
+        body: Center(
           child: Text(
             'Equalizer not available',
-            style: TextStyle(color: Colors.white),
+            style: const TextStyle(color: Colors.white),
           ),
         ),
       );
@@ -56,11 +58,11 @@ class EqualizerScreen extends StatelessWidget {
                       ),
                       onPressed: () => Navigator.pop(context),
                     ),
-                    const Expanded(
+                    Expanded(
                       child: Center(
                         child: Text(
-                          'ปรับแต่งเสียง',
-                          style: TextStyle(
+                          l10n.eqTitle,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 19,
                             fontWeight: FontWeight.w900,
@@ -97,6 +99,7 @@ class EqualizerScreen extends StatelessWidget {
                             children: eqProvider.presets.map((preset) {
                               final isSelected =
                                   preset == eqProvider.selectedPreset;
+                              final label = _getPresetLabel(context, preset);
                               return Padding(
                                 padding: const EdgeInsets.only(right: 12),
                                 child: GestureDetector(
@@ -144,7 +147,7 @@ class EqualizerScreen extends StatelessWidget {
                                           : [],
                                     ),
                                     child: Text(
-                                      preset,
+                                      label,
                                       style: TextStyle(
                                         color: isSelected
                                             ? Colors.white
@@ -188,12 +191,12 @@ class EqualizerScreen extends StatelessWidget {
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
-                                  const Text(
-                                    'เร่งเบส',
-                                    style: TextStyle(
+                                  Text(
+                                    l10n.eqBassBoost,
+                                    style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                   Text(
@@ -248,14 +251,15 @@ class EqualizerScreen extends StatelessWidget {
     EqualizerProvider eqProvider,
     int index,
   ) {
+    final l10n = AppLocalizations.of(context)!;
     final List<String> bandLabels = [
-      'ซับเบส',
-      'เบส',
-      'กลาง-ต่ำ',
-      'กลาง',
-      'กลาง-สูง',
-      'แหลม',
-      'ความใส',
+      l10n.eqBandSubBass,
+      l10n.eqBandBass,
+      l10n.eqBandLowMid,
+      l10n.eqBandMid,
+      l10n.eqBandHighMid,
+      l10n.eqBandTreble,
+      l10n.eqBandBrilliance,
     ];
 
     return Expanded(
@@ -314,5 +318,25 @@ class EqualizerScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _getPresetLabel(BuildContext context, String preset) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (preset) {
+      case 'normal':
+        return l10n.eqPresetNormal;
+      case 'pop':
+        return l10n.eqPresetPop;
+      case 'classic':
+        return l10n.eqPresetClassic;
+      case 'jazz':
+        return l10n.eqPresetJazz;
+      case 'rock':
+        return l10n.eqPresetRock;
+      case 'custom':
+        return l10n.eqPresetCustom;
+      default:
+        return preset;
+    }
   }
 }

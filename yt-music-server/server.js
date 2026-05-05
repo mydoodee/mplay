@@ -13,12 +13,15 @@ const PORT = process.env.PORT || 3456;
 // 🔧 Config
 // ============================================
 const CONFIG = {
-  CACHE_TTL: 25 * 60 * 1000, // 25 minutes
-  CACHE_MAX: 500, // เพิ่มขึ้นเพื่อรองรับคิวใหญ่
+  CACHE_TTL: 25 * 60 * 1000,      // 25 นาที — URL cache
+  CACHE_MAX: 500,
   CACHE_SWEEP: 50,
-  BATCH_MAX: 15, // 🚀 เพิ่มเป็น 15 เพื่อให้ทันกับแอปที่ pre-fetch เยอะ
+  SEARCH_CACHE_TTL: 10 * 60 * 1000, // 10 นาที — Search cache
+  SEARCH_CACHE_MAX: 100,
+  BATCH_MAX: 3,                    // 🔧 ลดจาก 15 → 3 เพื่อประหยัด CPU บน QNAP
   YTDLP_TIMEOUT: 30_000,
   MAX_REDIRECTS: 5,
+  MAX_CONCURRENT_YTDLP: 2,        // 🔧 จำกัด yt-dlp สูงสุด 2 ตัวพร้อมกัน
   LOG: process.env.LOG === "true",
 };
 
@@ -44,10 +47,37 @@ const log = {
 };
 
 // ============================================
+// 🔧 Semaphore — จำกัดจำนวน yt-dlp process ที่รันพร้อมกัน
+// ป้องกัน CPU 100% บน QNAP เมื่อหลายเครื่องใช้งานพร้อมกัน
+// ============================================
+let _activeYtDlp = 0;
+const _ytDlpQueue = [];
+
+function acquireSemaphore() {
+  return new Promise((resolve) => {
+    if (_activeYtDlp < CONFIG.MAX_CONCURRENT_YTDLP) {
+      _activeYtDlp++;
+      resolve();
+    } else {
+      _ytDlpQueue.push(resolve);
+    }
+  });
+}
+
+function releaseSemaphore() {
+  if (_ytDlpQueue.length > 0) {
+    const next = _ytDlpQueue.shift();
+    next(); // ส่งต่อให้ request ถัดไปที่รอคิวอยู่
+  } else {
+    _activeYtDlp--;
+  }
+}
+
+// ============================================
 // 🚀 URL Cache & Pending Resolutions (Coalescing)
 // ============================================
 const urlCache = new Map();
-const pendingResolutions = new Map(); // 🚀 เก็บรายการที่กำลังโหลดอยู่ เพื่อไม่ให้รันซ้ำ
+const pendingResolutions = new Map();
 
 function getCachedUrl(videoId) {
   const cached = urlCache.get(videoId);
@@ -60,12 +90,38 @@ function getCachedUrl(videoId) {
 
 function setCachedUrl(videoId, url) {
   urlCache.set(videoId, { url, timestamp: Date.now() });
-
   if (urlCache.size > CONFIG.CACHE_MAX) {
     const keys = urlCache.keys();
     for (let i = 0; i < CONFIG.CACHE_SWEEP; i++) {
       const key = keys.next().value;
       if (key) urlCache.delete(key);
+    }
+  }
+}
+
+// ============================================
+// 🔧 Search Cache & Pending Searches (Coalescing)
+// ป้องกันการ spawn yt-dlp ซ้ำเมื่อค้นหาคำเดิม
+// ============================================
+const searchCache = new Map();
+const pendingSearches = new Map();
+
+function getCachedSearch(cacheKey) {
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CONFIG.SEARCH_CACHE_TTL) {
+    return cached.results;
+  }
+  searchCache.delete(cacheKey);
+  return null;
+}
+
+function setCachedSearch(cacheKey, results) {
+  searchCache.set(cacheKey, { results, timestamp: Date.now() });
+  if (searchCache.size > CONFIG.SEARCH_CACHE_MAX) {
+    const keys = searchCache.keys();
+    for (let i = 0; i < 20; i++) {
+      const key = keys.next().value;
+      if (key) searchCache.delete(key);
     }
   }
 }
@@ -77,7 +133,7 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// Utility: Run yt-dlp command
+// Utility: Run yt-dlp command (with Semaphore)
 // ============================================
 function runYtDlp(args, timeoutMs = CONFIG.YTDLP_TIMEOUT) {
   return new Promise((resolve, reject) => {
@@ -89,12 +145,22 @@ function runYtDlp(args, timeoutMs = CONFIG.YTDLP_TIMEOUT) {
     execFile(YT_DLP_PATH, args, options, (error, stdout, stderr) => {
       if (error) {
         log.error("yt-dlp error:", stderr);
-        reject(new Error("yt-dlp failed")); // ไม่รั่ว stderr ออก client
+        reject(new Error("yt-dlp failed"));
         return;
       }
       resolve(stdout.trim());
     });
   });
+}
+
+// runYtDlp แบบมี Semaphore ป้องกัน CPU spike
+async function runYtDlpLimited(args, timeoutMs = CONFIG.YTDLP_TIMEOUT) {
+  await acquireSemaphore();
+  try {
+    return await runYtDlp(args, timeoutMs);
+  } finally {
+    releaseSemaphore();
+  }
 }
 
 // ============================================
@@ -106,27 +172,26 @@ async function resolveAudioUrl(videoId) {
   if (audioUrl) return audioUrl;
 
   // 2. Check if already resolving (Request Coalescing)
-  // 🚀 ถ้ากำลังรันอยู่ ให้รอผลจากอันเดิม ไม่ต้องรันใหม่
   if (pendingResolutions.has(videoId)) {
-    log.info(`⏳ Coalescing request for: ${videoId}`);
+    log.info(`⏳ Coalescing URL request for: ${videoId}`);
     return pendingResolutions.get(videoId);
   }
 
-  // 3. Resolve using yt-dlp
+  // 3. Resolve using yt-dlp (จำกัดด้วย Semaphore)
   const resolutionPromise = (async () => {
     try {
       const args = [
         `https://www.youtube.com/watch?v=${videoId}`,
         "-f",
-        "ba[ext=m4a]/ba/b", // m4a > best audio > best combined (fallback)
+        "ba[ext=m4a]/ba/b",
         "-g",
         "--no-warnings",
         "--no-playlist",
-        "--no-check-certificates", // 🚀 ข้ามการเช็ค cert เพื่อความเร็ว
-        "--no-cache-dir", // 🚀 ไม่ต้องยุ่งกับ cache ในดิสก์
+        "--no-check-certificates",
+        "--no-cache-dir",
       ];
 
-      let url = await runYtDlp(args);
+      let url = await runYtDlpLimited(args);
       url = url.split("\n")[0].trim();
 
       if (url) {
@@ -139,7 +204,6 @@ async function resolveAudioUrl(videoId) {
       log.error(`❌ Resolve failed for ${videoId}:`, err.message);
       return null;
     } finally {
-      // 🚀 ทำเสร็จแล้วลบออกจากรายการที่รอ
       pendingResolutions.delete(videoId);
     }
   })();
@@ -162,12 +226,27 @@ app.get("/api/search", async (req, res) => {
       return res.status(400).json({ error: 'Missing query parameter "q"' });
     }
 
+    // 🔧 Cache Key รวม query + offset + limit
+    const cacheKey = `${query.toLowerCase().trim()}__${offset}__${limit}`;
+
+    // 1. ตรวจ Search Cache ก่อน — คืนผลทันทีโดยไม่ต้อง spawn yt-dlp
+    const cached = getCachedSearch(cacheKey);
+    if (cached) {
+      log.info(`⚡ Search cache hit: "${query}"`);
+      return res.json({ results: cached });
+    }
+
+    // 2. Coalescing — ถ้ากำลังค้นหาคำเดิมอยู่ ให้รอผลจากอันเดิม
+    if (pendingSearches.has(cacheKey)) {
+      log.info(`⏳ Coalescing search for: "${query}"`);
+      const results = await pendingSearches.get(cacheKey);
+      return res.json({ results: results || [] });
+    }
+
     log.info(`🔍 Searching: "${query}" (limit: ${limit}, offset: ${offset})`);
 
+    // 3. รัน yt-dlp (จำกัดด้วย Semaphore)
     const isUrl = query.includes("youtube.com/") || query.includes("youtu.be/");
-
-    // หากเป็น URL ค้นหาตรงๆ ไม่ต้องใช้ Pagination
-    // หากเป็นคำค้นหาทั่วไป ใช้ ytsearchN โดยที่ N คือจุดสิ้นสุดที่เราต้องการเข้าถึง
     const maxResults = offset + limit;
     const searchArg = isUrl ? query : `ytsearch${maxResults}:${query}`;
 
@@ -183,31 +262,48 @@ app.get("/api/search", async (req, res) => {
       "%(id)s\t%(title)s\t%(channel)s\t%(duration)s\t%(thumbnail)s",
     ];
 
-    const output = await runYtDlp(args);
-    const lines = output.split("\n").filter((line) => line.trim());
+    const searchPromise = (async () => {
+      try {
+        const output = await runYtDlpLimited(args);
+        const lines = output.split("\n").filter((line) => line.trim());
 
-    const results = lines
-      .map((line) => {
-        const [id, title, artist, duration, thumbnail] = line.split("\t");
-        const cleanId = (id || "").trim();
-        if (!cleanId) return null;
-        const thumb =
-          thumbnail && thumbnail.startsWith("http")
-            ? thumbnail
-            : `https://i.ytimg.com/vi/${cleanId}/mqdefault.jpg`;
-        return {
-          id: cleanId,
-          title: title || "ไม่ระบุชื่อเพลง",
-          artist: artist || "ไม่ระบุชื่อศิลปิน",
-          duration: parseInt(duration) || 0,
-          thumbnail: thumb,
-        };
-      })
-      .filter(Boolean);
+        const results = lines
+          .map((line) => {
+            const [id, title, artist, duration, thumbnail] = line.split("\t");
+            const cleanId = (id || "").trim();
+            if (!cleanId) return null;
+            const thumb =
+              thumbnail && thumbnail.startsWith("http")
+                ? thumbnail
+                : `https://i.ytimg.com/vi/${cleanId}/mqdefault.jpg`;
+            return {
+              id: cleanId,
+              title: title || "ไม่ระบุชื่อเพลง",
+              artist: artist || "ไม่ระบุชื่อศิลปิน",
+              duration: parseInt(duration) || 0,
+              thumbnail: thumb,
+            };
+          })
+          .filter(Boolean);
 
-    log.info(
-      `✅ Found ${results.length} results (returning items ${offset + 1} to ${offset + results.length})`,
-    );
+        // บันทึก Cache
+        setCachedSearch(cacheKey, results);
+        log.info(`✅ Search done & cached: "${query}" → ${results.length} results`);
+        return results;
+      } catch (err) {
+        log.error("Search yt-dlp error:", err.message);
+        return null;
+      } finally {
+        pendingSearches.delete(cacheKey);
+      }
+    })();
+
+    pendingSearches.set(cacheKey, searchPromise);
+
+    const results = await searchPromise;
+    if (results === null) {
+      return res.status(500).json({ error: "Search failed" });
+    }
     res.json({ results });
   } catch (error) {
     log.error("Search error:", error.message);
@@ -237,7 +333,7 @@ app.get("/api/info/:videoId", async (req, res) => {
       "%(id)s\t%(title)s\t%(channel)s\t%(duration)s\t%(thumbnail)s\t%(view_count)s",
     ];
 
-    const output = await runYtDlp(args);
+    const output = await runYtDlpLimited(args);
     const [id, title, artist, duration, thumbnail, viewCount] =
       output.split("\t");
     const cleanId = (id || "").trim();
@@ -385,21 +481,21 @@ app.post("/api/audio-urls", async (req, res) => {
       return res.status(400).json({ error: "Missing or empty videoIds array" });
     }
 
+    // 🔧 จำกัด BATCH_MAX = 3 เพื่อป้องกัน CPU spike บน QNAP
     const batch = videoIds.filter(isValidVideoId).slice(0, CONFIG.BATCH_MAX);
 
-    log.info(`📦 Batch resolving ${batch.length} URLs...`);
+    log.info(`📦 Batch resolving ${batch.length} URLs (max ${CONFIG.BATCH_MAX})...`);
 
     const results = {};
 
-    await Promise.allSettled(
-      batch.map(async (videoId) => {
-        try {
-          results[videoId] = await resolveAudioUrl(videoId);
-        } catch {
-          results[videoId] = null;
-        }
-      }),
-    );
+    // 🔧 รันแบบ sequential แทน parallel เพื่อไม่ให้ Semaphore คิวยาว
+    for (const videoId of batch) {
+      try {
+        results[videoId] = await resolveAudioUrl(videoId);
+      } catch {
+        results[videoId] = null;
+      }
+    }
 
     log.info(
       `✅ Batch resolved: ${Object.values(results).filter(Boolean).length}/${batch.length}`,
@@ -421,7 +517,10 @@ app.get("/api/health", async (req, res) => {
     res.json({
       status: "ok",
       ytdlp_version: version,
-      cache_size: urlCache.size,
+      url_cache_size: urlCache.size,
+      search_cache_size: searchCache.size,
+      active_ytdlp: _activeYtDlp,
+      queued_ytdlp: _ytDlpQueue.length,
       server_time: new Date().toISOString(),
     });
   } catch {
@@ -431,6 +530,16 @@ app.get("/api/health", async (req, res) => {
       server_time: new Date().toISOString(),
     });
   }
+});
+
+// ============================================
+// API: Heartbeat
+// POST /api/heartbeat
+// ============================================
+app.post("/api/heartbeat", (req, res) => {
+  const { deviceId, deviceName, platform } = req.body;
+  log.info(`❤️ Heartbeat from ${deviceName} (${platform}) — ${deviceId}`);
+  res.json({ status: "ok" });
 });
 
 // ============================================
@@ -445,5 +554,6 @@ function isValidVideoId(id) {
 // Start Server
 // ============================================
 app.listen(PORT, () => {
-  console.log(`🚀 M-PLAY Server optimized & running on port ${PORT} (LOG=${CONFIG.LOG})`);
+  console.log(`🚀 M-PLAY Server running on port ${PORT} (LOG=${CONFIG.LOG})`);
+  console.log(`⚙️  MAX_CONCURRENT_YTDLP=${CONFIG.MAX_CONCURRENT_YTDLP}, BATCH_MAX=${CONFIG.BATCH_MAX}`);
 });

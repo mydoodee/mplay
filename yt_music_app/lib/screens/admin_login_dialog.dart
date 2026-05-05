@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'admin_dashboard_screen.dart';
+import '../l10n/app_localizations.dart';
 
 class AdminLoginDialog extends StatefulWidget {
   const AdminLoginDialog({super.key});
@@ -40,7 +41,7 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
       );
     } else {
       setState(() {
-        _errorMsg = 'รหัสผ่านหรือชื่อผู้ใช้ไม่ถูกต้อง';
+        _errorMsg = AppLocalizations.of(context)!.adminLoginInvalid;
         _isLoading = false;
       });
     }
@@ -51,9 +52,9 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A1A),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: const Text(
-        'mPlay System Admin',
-        style: TextStyle(color: Colors.white, fontSize: 18),
+      title: Text(
+        AppLocalizations.of(context)!.adminLoginTitle,
+        style: const TextStyle(color: Colors.white, fontSize: 18),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -61,9 +62,9 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
           TextField(
             controller: _usernameController,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: 'Username',
-              labelStyle: TextStyle(color: Color(0xFF777777)),
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.usernameLabel,
+              labelStyle: const TextStyle(color: Color(0xFF777777)),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: Color(0xFF444444)),
               ),
@@ -77,9 +78,9 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
             controller: _passwordController,
             obscureText: true,
             style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: 'Password',
-              labelStyle: TextStyle(color: Color(0xFF777777)),
+            decoration: InputDecoration(
+              labelText: AppLocalizations.of(context)!.passwordLabel,
+              labelStyle: const TextStyle(color: Color(0xFF777777)),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: Color(0xFF444444)),
               ),
@@ -101,9 +102,9 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
-            'ยกเลิก',
-            style: TextStyle(color: Color(0xFF777777)),
+          child: Text(
+            AppLocalizations.of(context)!.cancel,
+            style: const TextStyle(color: Color(0xFF777777)),
           ),
         ),
         ElevatedButton(
@@ -114,14 +115,14 @@ class _AdminLoginDialogState extends State<AdminLoginDialog> {
           ),
           child: _isLoading
               ? const SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(
+                    color: Color(0xFFF15A24),
                     strokeWidth: 2,
-                    color: Colors.white,
                   ),
                 )
-              : const Text('เข้าสู่ระบบ'),
+              : Text(AppLocalizations.of(context)!.adminLogin),
         ),
       ],
     );

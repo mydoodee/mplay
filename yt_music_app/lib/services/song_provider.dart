@@ -67,16 +67,16 @@ class SongProvider with ChangeNotifier {
       if (item != null && item.id.isNotEmpty) {
         final isLocal = item.extras?['isLocal'] == true;
         final filePath = item.extras?['filePath'] as String?;
-        
+
         Uint8List? coverArtBytes;
         if (isLocal && filePath != null) {
           // If the song is already in _localSongs, just use its coverArtBytes
           try {
-             final existing = _localSongs.firstWhere((s) => s.id == item.id);
-             coverArtBytes = existing.coverArtBytes;
+            final existing = _localSongs.firstWhere((s) => s.id == item.id);
+            coverArtBytes = existing.coverArtBytes;
           } catch (_) {
-             // Extract on the fly if not in RAM (e.g. played from Playlist/History)
-             coverArtBytes = await _localMusicService.extractCoverArt(filePath);
+            // Extract on the fly if not in RAM (e.g. played from Playlist/History)
+            coverArtBytes = await _localMusicService.extractCoverArt(filePath);
           }
         }
 
@@ -128,30 +128,41 @@ class SongProvider with ChangeNotifier {
     _isFetchingMore = true;
     notifyListeners();
 
-    final currentOffset = _searchResults.length;
-    final moreResults = await _apiService.searchSongs(
-      _currentSearchQuery,
-      limit: _pageSize,
-      offset: currentOffset,
-    );
+    try {
+      final currentOffset = _searchResults.length;
+      final moreResults = await _apiService.searchSongs(
+        _currentSearchQuery,
+        limit: _pageSize,
+        offset: currentOffset,
+      );
 
-    if (moreResults.isEmpty) {
-      _hasMoreResults = false;
-    } else {
-      _searchResults.addAll(moreResults);
-      if (moreResults.length < _pageSize) {
+      if (moreResults.isEmpty) {
         _hasMoreResults = false;
+      } else {
+        _searchResults.addAll(moreResults);
+        if (moreResults.length < _pageSize) {
+          _hasMoreResults = false;
+        }
       }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in searchMore: $e');
+      }
+    } finally {
+      _isFetchingMore = false;
+      notifyListeners();
     }
-
-    _isFetchingMore = false;
-    notifyListeners();
   }
 
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
     try {
       if (queue != null && queue.isNotEmpty) {
-        await audioHandler?.setQueue(queue, initialIndex: index);
+        // หา index จาก song.id เพื่อป้องกันกรณีที่ index ผิดหรือ indexOf คืน -1
+        final resolvedIndex = index >= 0 && index < queue.length
+            ? index
+            : queue.indexWhere((s) => s.id == song.id);
+        final safeIndex = resolvedIndex >= 0 ? resolvedIndex : 0;
+        await audioHandler?.setQueue(queue, initialIndex: safeIndex);
       } else {
         await audioHandler?.playSong(song);
       }
@@ -176,13 +187,16 @@ class SongProvider with ChangeNotifier {
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
-    
-    // 🚀 บันทึกประวัติแบบเบื้องหลัง
+
+    // 🚀 บันทึกประวัติเฉพาะเพลงที่เล่นจริง (ไม่บันทึกทั้ง queue เพื่อประหยัด DB I/O)
     Future.microtask(() async {
-      for (var song in songs) {
-        await _dbHelper.addToHistory(song);
+      if (songs.isNotEmpty && initialIndex < songs.length) {
+        await _dbHelper.addToHistory(songs[initialIndex]);
+        final alreadyInHistory = _history.any((s) => s.id == songs[initialIndex].id);
+        if (!alreadyInHistory) {
+          await _loadHistory();
+        }
       }
-      await _loadHistory();
     });
   }
 
@@ -200,7 +214,8 @@ class SongProvider with ChangeNotifier {
       final rawFavorites = await _dbHelper.getFavorites();
       final validFavorites = <Song>[];
       for (final song in rawFavorites) {
-        if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        if (song.id.startsWith('local_') &&
+            (song.filePath == null || song.filePath!.isEmpty)) {
           await _dbHelper.removeFavorite(song.id);
         } else {
           // โหลด cover art สำหรับเพลง local ใน favorites
@@ -219,7 +234,8 @@ class SongProvider with ChangeNotifier {
       final rawHistory = await _dbHelper.getHistory();
       final validHistory = <Song>[];
       for (final song in rawHistory) {
-        if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+        if (song.id.startsWith('local_') &&
+            (song.filePath == null || song.filePath!.isEmpty)) {
           await _dbHelper.removeFromHistory(song.id);
         } else {
           validHistory.add(await _withCoverArt(song));
@@ -283,7 +299,8 @@ class SongProvider with ChangeNotifier {
         final rawSongs = await _dbHelper.getSongsForPlaylist(playlist.id);
         final validSongs = <Song>[];
         for (final song in rawSongs) {
-          if (song.id.startsWith('local_') && (song.filePath == null || song.filePath!.isEmpty)) {
+          if (song.id.startsWith('local_') &&
+              (song.filePath == null || song.filePath!.isEmpty)) {
             await _dbHelper.removeSongFromPlaylist(playlist.id, song.id);
           } else {
             // โหลด cover art สำหรับเพลง local ใน playlists
