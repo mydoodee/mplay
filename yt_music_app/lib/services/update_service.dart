@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../config/api_config.dart';
 
 class AppUpdateInfo {
@@ -57,13 +56,17 @@ class UpdateService {
         final currentBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
         // Debug log for version comparison
         if (kDebugMode) {
-          print('Update check: fetched build ${updateInfo.buildNumber}, current build $currentBuild');
+          print(
+            'Update check: fetched build ${updateInfo.buildNumber}, current build $currentBuild',
+          );
         }
         if (updateInfo.buildNumber > currentBuild) {
           return updateInfo;
         } else {
           if (kDebugMode) {
-            print('No update needed. Current build $currentBuild >= fetched ${updateInfo.buildNumber}');
+            print(
+              'No update needed. Current build $currentBuild >= fetched ${updateInfo.buildNumber}',
+            );
           }
         }
       }
@@ -80,7 +83,6 @@ class UpdateService {
     return true;
   }
 
-
   /// ดาวน์โหลด APK
   static Future<DownloadResult> downloadApk({
     required String url,
@@ -92,7 +94,7 @@ class UpdateService {
         dir = await getExternalStorageDirectory();
       }
       dir ??= await getApplicationDocumentsDirectory();
-      
+
       final savePath = '${dir.path}/app_update.apk';
 
       // ลบไฟล์เก่าก่อนดาวน์โหลด
@@ -113,7 +115,9 @@ class UpdateService {
       final saved = File(savePath);
       if (!await saved.exists() || await saved.length() == 0) {
         if (kDebugMode) print('APK download failed or file empty');
-        return DownloadResult(errorMessage: 'ดาวน์โหลดไฟล์ไม่สมบูรณ์ หรือไฟล์ว่างเปล่า');
+        return DownloadResult(
+          errorMessage: 'ดาวน์โหลดไฟล์ไม่สมบูรณ์ หรือไฟล์ว่างเปล่า',
+        );
       }
 
       if (kDebugMode) {

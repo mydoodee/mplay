@@ -157,7 +157,12 @@ class SongProvider with ChangeNotifier {
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
     try {
       if (queue != null && queue.isNotEmpty) {
-        await audioHandler?.setQueue(queue, initialIndex: index);
+        // หา index จาก song.id เพื่อป้องกันกรณีที่ index ผิดหรือ indexOf คืน -1
+        final resolvedIndex = index >= 0 && index < queue.length
+            ? index
+            : queue.indexWhere((s) => s.id == song.id);
+        final safeIndex = resolvedIndex >= 0 ? resolvedIndex : 0;
+        await audioHandler?.setQueue(queue, initialIndex: safeIndex);
       } else {
         await audioHandler?.playSong(song);
       }

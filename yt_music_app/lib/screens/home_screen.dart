@@ -633,7 +633,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             onTap: () => songProvider.playSong(
                               song,
                               queue: songProvider.history,
-                              index: songProvider.history.indexOf(song),
+                              index: songProvider.history.indexWhere(
+                                (s) => s.id == song.id,
+                              ),
                             ),
                             child: Container(
                               width: 150,
