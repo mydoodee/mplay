@@ -7,6 +7,7 @@ class Song {
   final String thumbnail;
   final int duration;
   final bool isLocal;
+  final bool isLive;       // เพลงที่กำลัง live stream
   final String? filePath;
   final Uint8List? coverArtBytes;
 
@@ -47,6 +48,7 @@ class Song {
     required this.thumbnail,
     required this.duration,
     this.isLocal = false,
+    this.isLive = false,
     this.filePath,
     this.coverArtBytes,
   });
@@ -58,6 +60,7 @@ class Song {
       artist: json['artist'] ?? 'Unknown Artist',
       thumbnail: json['thumbnail'] ?? '',
       duration: json['duration'] ?? 0,
+      isLive: json['isLive'] == true,
     );
   }
 
@@ -68,6 +71,7 @@ class Song {
       'artist': artist,
       'thumbnail': thumbnail,
       'duration': duration,
+      'isLive': isLive,
     };
   }
 
@@ -80,6 +84,7 @@ class Song {
       'thumbnail': thumbnail,
       'duration': duration,
       'is_local': isLocal ? 1 : 0,
+      'is_live': isLive ? 1 : 0,
       'file_path': filePath,
     };
   }
@@ -92,6 +97,7 @@ class Song {
       thumbnail: map['thumbnail'] ?? '',
       duration: map['duration'] ?? 0,
       isLocal: (map['is_local'] == 1),
+      isLive: (map['is_live'] == 1),
       filePath: map['file_path'],
     );
   }

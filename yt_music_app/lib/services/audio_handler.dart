@@ -195,23 +195,34 @@ class MyAudioHandler extends BaseAudioHandler {
         if (!_player.playing) {
           if (kDebugMode)
             print('🔄 Attempting direct URL recovery for: ${currentItem.id}');
-          final directUrl = await ApiService().getAudioUrl(currentItem.id);
-          if (directUrl != null) {
+          final result = await ApiService().getAudioUrl(currentItem.id);
+          if (result != null) {
+            final directUrl = result['url'] as String;
+            final isLive = result['isLive'] == true;
             final newSource = AudioSource.uri(
               Uri.parse(directUrl),
               tag: currentItem,
-              headers: {'User-Agent': 'Mozilla/5.0'},
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                if (isLive) 'Accept-Encoding': 'identity',
+              },
             );
-            final index = _player.currentIndex ?? 0;
-            if (index < _playlist.length) {
-              await _playlist.removeAt(index);
-              await _playlist.insert(index, newSource);
-              await _player.seek(Duration.zero, index: index);
+            // Live stream — ไม่ buffer มาก seek และ play ทันที
+            if (isLive) {
+              await _playlist.removeAt(_player.currentIndex ?? 0);
+              await _playlist.insert(_player.currentIndex ?? 0, newSource);
               await _player.play();
+            } else {
+              final index = _player.currentIndex ?? 0;
+              if (index < _playlist.length) {
+                await _playlist.removeAt(index);
+                await _playlist.insert(index, newSource);
+                await _player.seek(Duration.zero, index: index);
+                await _player.play();
+              }
             }
           } else {
             if (kDebugMode) print('❌ Direct recovery failed: No direct URL found');
-            // ไม่ call _recoverIdlePlayer ซ้ำ — ปล่อยให้ watchdog จัดการรอบหน้า
           }
         }
       } catch (e) {
@@ -260,12 +271,17 @@ class MyAudioHandler extends BaseAudioHandler {
   }
 
   /// ปลดล็อก _isChangingSong อัตโนมัติ ป้องกัน deadlock
-  void _startChangingSongGuard() {
+  void _startChangingSongGuard({bool isLive = false}) {
     _changingSongTimeout?.cancel();
     _isChangingSong = true;
-    _changingSongTimeout = Timer(const Duration(seconds: 10), () {
+    // Live stream ใช้ 60s เพราะ HLS buffer นานกว่าเพลงปกติ
+    final duration = isLive
+        ? const Duration(seconds: 60)
+        : const Duration(seconds: 10);
+    _changingSongTimeout = Timer(duration, () {
       if (_isChangingSong) {
-        if (kDebugMode) print('⚠️ _isChangingSong timeout — force reset');
+        if (kDebugMode)
+          print('⚠️ _isChangingSong timeout — force reset (isLive=$isLive)');
         _isChangingSong = false;
       }
     });
@@ -412,8 +428,6 @@ class MyAudioHandler extends BaseAudioHandler {
     // 🚀 อัพเดท UI ทันทีไม่ต้องรอโหลด
     mediaItem.add(item);
 
-    // ℹ️ Log เพลงที่ duration = 0 (อาจเป็น live stream หรือ API ไม่ส่ง duration)
-    // ไม่ block — ปล่อยให้เล่นปกติ โดยมี timeout 15 วิ ป้องกันค้าง
     if (!song.isLocal && song.duration == 0) {
       if (kDebugMode)
         print('ℹ️ Song has no duration (may be live): ${song.title}');
@@ -425,6 +439,7 @@ class MyAudioHandler extends BaseAudioHandler {
       try {
         await _player.seek(Duration.zero, index: existingIndex);
         await _player.play();
+        _onPlaybackStartedSuccessfully(song.id);
       } catch (e) {
         if (kDebugMode) print('❌ Seek to existing error: $e');
       } finally {
@@ -441,21 +456,22 @@ class MyAudioHandler extends BaseAudioHandler {
       if (song.isLocal && song.filePath != null) {
         source = AudioSource.file(song.filePath!, tag: item);
       } else {
-        // 🔴 เพลงที่ duration = 0 (live/unknown) → ลอง direct URL ก่อน
-        // เพราะ server proxy อาจไม่รองรับ live stream
         String streamUri = ApiConfig.streamUrl(song.id);
-        if (song.duration == 0) {
-          if (kDebugMode) print('🔗 Trying direct URL for duration=0 song...');
+
+        // 🔴 Live stream — ดึง HLS URL โดยตรง (ไม่ผ่าน proxy)
+        if (song.isLive || song.duration == 0) {
+          if (kDebugMode) print('📡 Live song — fetching HLS URL directly...');
           try {
-            final directUrl = await ApiService()
+            final result = await ApiService()
                 .getAudioUrl(song.id)
-                .timeout(const Duration(seconds: 10));
-            if (directUrl != null && directUrl.isNotEmpty) {
-              streamUri = directUrl;
-              if (kDebugMode) print('✅ Got direct URL for live/unknown song');
+                .timeout(const Duration(seconds: 15));
+            if (result != null) {
+              streamUri = result['url'] as String;
+              if (kDebugMode)
+                print('✅ Got live/HLS URL: isLive=${result['isLive']}');
             }
           } catch (e) {
-            if (kDebugMode) print('⚠️ Direct URL failed, using proxy: $e');
+            if (kDebugMode) print('⚠️ Live URL fetch failed, using proxy: $e');
           }
         } else {
           // เพลงปกติ → pre-cache URL ใน background
@@ -464,23 +480,44 @@ class MyAudioHandler extends BaseAudioHandler {
         source = AudioSource.uri(
           Uri.parse(streamUri),
           tag: item,
-          headers: {'User-Agent': 'Mozilla/5.0'},
+          headers: {
+            'User-Agent': 'Mozilla/5.0',
+            // ป้องกัน ExoPlayer GZIP double-decompress บน HLS manifest
+            if (song.isLive || song.duration == 0) 'Accept-Encoding': 'identity',
+          },
         );
       }
 
-      _startChangingSongGuard();
+      _startChangingSongGuard(isLive: song.isLive);
       try {
-        // ⏱ Timeout 15 วินาที — ถ้า add+seek+play ไม่สำเร็จใน 15 วิ ให้ skip
         await Future(() async {
           await _playlist.add(source);
-          await _player.seek(Duration.zero, index: targetIndex);
+          if (song.isLive) {
+            // Live: ไม่ seek ไป Duration.zero เพราะ live ไม่มีจุดเริ่ม
+            await _player.seek(null, index: targetIndex);
+          } else {
+            await _player.seek(Duration.zero, index: targetIndex);
+          }
           await _player.play();
+          _onPlaybackStartedSuccessfully(song.id);
         }).timeout(
-          const Duration(seconds: 15),
+          // Live: ใช้ 60s เพราะ HLS ต้องโหลด manifest + buffer segment
+          song.isLive
+              ? const Duration(seconds: 60)
+              : const Duration(seconds: 15),
           onTimeout: () {
-            if (kDebugMode)
-              print('⏱ playSong timeout — source may be live/broken');
-            _forceResetIfStuck();
+            final state = _player.processingState;
+            // ถ้าเล่นอยู่เรียบร้อย (ready/buffering) — ไม่ต้อง reset
+            if (state == ProcessingState.ready ||
+                state == ProcessingState.buffering) {
+              if (kDebugMode)
+                print('ℹ️ Live timeout — player is $state, releasing guard only');
+              _endChangingSong(); // แค่ release guard ไม่ต้อง reset
+            } else {
+              if (kDebugMode)
+                print('⏱ playSong timeout — source may be live/broken (state=$state)');
+              _forceResetIfStuck();
+            }
           },
         );
         unawaited(_trimOldSources());
@@ -721,7 +758,6 @@ class MyAudioHandler extends BaseAudioHandler {
   MediaItem _songToMediaItem(Song song) {
     Uri? artUri;
     if (song.isLocal) {
-      // Local file — ตั้งเป็น null เพื่อป้องกัน Android SystemUI crash จาก dummy URI
       artUri = null;
     } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
       artUri = Uri.parse(song.thumbnail);
@@ -733,8 +769,13 @@ class MyAudioHandler extends BaseAudioHandler {
       title: song.title,
       artist: song.artist,
       artUri: artUri,
-      duration: Duration(seconds: song.duration),
-      extras: {'isLocal': song.isLocal, 'filePath': song.filePath},
+      // Live stream: ตั้ง duration = null เพราะ HLS ไม่รู้ความยาวล่วงหน้า
+      duration: song.isLive ? null : Duration(seconds: song.duration),
+      extras: {
+        'isLocal': song.isLocal,
+        'isLive': song.isLive,
+        'filePath': song.filePath,
+      },
     );
   }
 
