@@ -22,6 +22,12 @@ class PlayerScreen extends StatelessWidget {
     return "$twoDigitMinutes:$twoDigitSeconds";
   }
 
+  /// Force retry เมื่อ player ค้าง
+  void _retryPlayback() {
+    audioHandler?.seek(Duration.zero);
+    audioHandler?.play();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -70,70 +76,82 @@ class PlayerScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // 🎵 Dynamic Blurred Background
-          Positioned.fill(
-            child: currentSong.isLocal
-                ? (currentSong.coverArtBytes != null
-                      ? Image.memory(
-                          currentSong.coverArtBytes!,
-                          fit: BoxFit.cover,
-                        )
-                      : Container(
-                          color: const Color(0xFF0D0D0D),
-                          child: const Center(
-                            child: AppLogo(
-                              size: 100,
-                              showText: false,
-                              color: Colors.white24,
+      body: GestureDetector(
+        // 🎯 Swipe left/right เพื่อเปลี่ยนเพลง
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null) {
+            if (details.primaryVelocity! < -400) {
+              audioHandler?.skipToNext();
+            } else if (details.primaryVelocity! > 400) {
+              audioHandler?.skipToPrevious();
+            }
+          }
+        },
+        child: Stack(
+          children: [
+            // 🎵 Dynamic Blurred Background
+            Positioned.fill(
+              child: currentSong.isLocal
+                  ? (currentSong.coverArtBytes != null
+                        ? Image.memory(
+                            currentSong.coverArtBytes!,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            color: const Color(0xFF0D0D0D),
+                            child: const Center(
+                              child: AppLogo(
+                                size: 100,
+                                showText: false,
+                                color: Colors.white24,
+                              ),
                             ),
+                          ))
+                  : CachedNetworkImage(
+                      imageUrl: currentSong.thumbnailUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (context, url, error) => Container(
+                        color: const Color(0xFF0D0D0D),
+                        child: const Center(
+                          child: AppLogo(
+                            size: 100,
+                            showText: false,
+                            color: Colors.white24,
                           ),
-                        ))
-                : CachedNetworkImage(
-                    imageUrl: currentSong.thumbnailUrl,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      color: const Color(0xFF0D0D0D),
-                      child: const Center(
-                        child: AppLogo(
-                          size: 100,
-                          showText: false,
-                          color: Colors.white24,
                         ),
                       ),
                     ),
-                  ),
-          ),
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.4),
-                      Colors.black.withValues(alpha: 0.7),
-                      Colors.black.withValues(alpha: 0.95),
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 60, sigmaY: 60),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.4),
+                        Colors.black.withValues(alpha: 0.7),
+                        Colors.black.withValues(alpha: 0.95),
+                      ],
+                      stops: const [0.0, 0.5, 1.0],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // Main Content
-          SafeArea(
-            left: false,
-            right: false,
-            child: useWide
-                ? _buildWideLayout(context, songProvider, currentSong)
-                : _buildNarrowLayout(context, songProvider, currentSong),
-          ),
-        ],
+            // Main Content
+            SafeArea(
+              left: false,
+              right: false,
+              child: useWide
+                  ? _buildWideLayout(context, songProvider, currentSong)
+                  : _buildNarrowLayout(context, songProvider, currentSong),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -523,13 +541,30 @@ class PlayerScreen extends StatelessWidget {
                   child:
                       processingState == AudioProcessingState.loading ||
                           processingState == AudioProcessingState.buffering
-                      ? SizedBox(
-                          width: playIconSize * 0.7,
-                          height: playIconSize * 0.7,
-                          child: const CircularProgressIndicator(
-                            color: Colors.black,
-                            strokeWidth: 2.5,
-                          ),
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: playIconSize * 0.6,
+                              height: playIconSize * 0.6,
+                              child: const CircularProgressIndicator(
+                                color: Colors.black,
+                                strokeWidth: 2.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            GestureDetector(
+                              onTap: _retryPlayback,
+                              child: Text(
+                                'ลองอีกครั้ง',
+                                style: TextStyle(
+                                  color: Colors.black.withValues(alpha: 0.6),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         )
                       : Icon(
                           playing

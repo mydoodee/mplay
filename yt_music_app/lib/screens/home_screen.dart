@@ -667,7 +667,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             onTap: () => songProvider.playSong(
                               song,
                               queue: songProvider.history,
-                              index: songProvider.history.indexOf(song),
+                              index: songProvider.history.indexWhere(
+                                (s) => s.id == song.id,
+                              ),
                             ),
                             child: Container(
                               width: 150,
@@ -793,11 +795,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     isPlaying: song.id == currentSong?.id,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
-                    onTap: () => songProvider.playSong(
-                      song,
-                      queue: results,
-                      index: results.indexOf(song),
-                    ),
+                    onTap: () => songProvider.playSong(song),
                   ),
                 ),
               ),

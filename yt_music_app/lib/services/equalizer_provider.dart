@@ -39,12 +39,18 @@ class EqualizerProvider extends ChangeNotifier {
     _selectedPreset = prefs.getString('eq_preset') ?? 'normal';
 
     // Migrate old Thai presets if found
-    if (_selectedPreset == 'ปกติ') _selectedPreset = 'normal';
-    else if (_selectedPreset == 'ป๊อป') _selectedPreset = 'pop';
-    else if (_selectedPreset == 'ร็อก') _selectedPreset = 'rock';
-    else if (_selectedPreset == 'แจ๊ส') _selectedPreset = 'jazz';
-    else if (_selectedPreset == 'คลาสสิก') _selectedPreset = 'classic';
-    else if (_selectedPreset == 'กำหนดเอง') _selectedPreset = 'custom';
+    if (_selectedPreset == 'ปกติ') {
+      _selectedPreset = 'normal';
+    } else if (_selectedPreset == 'ป๊อป')
+      _selectedPreset = 'pop';
+    else if (_selectedPreset == 'ร็อก')
+      _selectedPreset = 'rock';
+    else if (_selectedPreset == 'แจ๊ส')
+      _selectedPreset = 'jazz';
+    else if (_selectedPreset == 'คลาสสิก')
+      _selectedPreset = 'classic';
+    else if (_selectedPreset == 'กำหนดเอง')
+      _selectedPreset = 'custom';
 
     _bassBoosterLevel = prefs.getDouble('eq_bass_boost') ?? 0.0;
 

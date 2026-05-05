@@ -80,22 +80,22 @@ class ApiService {
   }
 
   /// 🎵 Get direct audio URL with retry
-  /// ลอง 2 ครั้ง เพื่อให้ได้ URL แน่ๆ
-  Future<String?> getAudioUrl(String videoId) async {
+  /// Returns Map: { 'url': String, 'isLive': bool, 'isHls': bool } or null
+  Future<Map<String, dynamic>?> getAudioUrl(String videoId) async {
     // Attempt 1
-    String? url = await _fetchAudioUrl(videoId);
-    if (url != null) return url;
+    Map<String, dynamic>? result = await _fetchAudioUrl(videoId);
+    if (result != null) return result;
 
     // Attempt 2 — retry once
     if (kDebugMode) {
       print('🔄 Retrying audio URL for: $videoId');
     }
     await Future.delayed(const Duration(milliseconds: 500));
-    url = await _fetchAudioUrl(videoId);
-    return url;
+    result = await _fetchAudioUrl(videoId);
+    return result;
   }
 
-  Future<String?> _fetchAudioUrl(String videoId) async {
+  Future<Map<String, dynamic>?> _fetchAudioUrl(String videoId) async {
     try {
       final response = await _client
           .get(Uri.parse(ApiConfig.audioUrl(videoId)))
@@ -107,7 +107,11 @@ class ApiService {
         );
         final url = data['url'] as String?;
         if (url != null && url.isNotEmpty) {
-          return url;
+          return {
+            'url': url,
+            'isLive': data['isLive'] == true,
+            'isHls': data['isHls'] == true,
+          };
         }
       }
       return null;
@@ -138,7 +142,13 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
         final Map<String, dynamic> urls = data['urls'] ?? {};
-        return urls.map((key, value) => MapEntry(key, value as String?));
+        // รองรับทั้ง String format เดิม และ Map format ใหม่ { url, isLive, isHls }
+        return urls.map((key, value) {
+          if (value is Map) {
+            return MapEntry(key, value['url'] as String?);
+          }
+          return MapEntry(key, value as String?);
+        });
       }
       return {};
     } catch (e) {
