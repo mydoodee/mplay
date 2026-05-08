@@ -144,11 +144,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
+
     // Fetch suggestions more quickly (500ms)
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).fetchSuggestions(query);
+        Provider.of<SongProvider>(
+          context,
+          listen: false,
+        ).fetchSuggestions(query);
       } else {
         Provider.of<SongProvider>(context, listen: false).clearSuggestions();
       }
@@ -386,14 +389,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: IconButton(
-                        icon: const Icon(Icons.mic_rounded, color: Color(0xFF888888), size: 22),
+                        icon: const Icon(
+                          Icons.mic_rounded,
+                          color: Color(0xFF888888),
+                          size: 22,
+                        ),
                         onPressed: () async {
                           final result = await showGeneralDialog<String>(
                             context: context,
                             barrierDismissible: true,
                             barrierLabel: '',
-                            pageBuilder: (context, _, __) => VoiceSearchDialog(
-                              initialLocale: Localizations.localeOf(context).toString(),
+                            pageBuilder: (context, _, _) => VoiceSearchDialog(
+                              initialLocale: Localizations.localeOf(
+                                context,
+                              ).toString(),
                             ),
                           );
                           if (result != null && result.isNotEmpty) {
@@ -450,12 +459,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   final suggestion = provider.suggestions[index];
                   return ListTile(
                     dense: true,
-                    leading: const Icon(Icons.history_rounded, color: Color(0xFF555555), size: 18),
+                    leading: const Icon(
+                      Icons.history_rounded,
+                      color: Color(0xFF555555),
+                      size: 18,
+                    ),
                     title: Text(
                       suggestion,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
                     ),
-                    trailing: const Icon(Icons.north_west_rounded, color: Color(0xFF444444), size: 16),
+                    trailing: const Icon(
+                      Icons.north_west_rounded,
+                      color: Color(0xFF444444),
+                      size: 16,
+                    ),
                     onTap: () => _performSearch(suggestion),
                   );
                 },
@@ -827,7 +847,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     isPlaying: song.id == currentSong?.id,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
-                    onTap: () => songProvider.playSong(song),
+                    onTap: () => songProvider.playSong(
+                      song,
+                      queue: filteredResults,
+                      index: index,
+                    ),
                   ),
                 ),
               ),
@@ -1656,8 +1680,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF15A24)
-                                        .withValues(alpha: 0.9),
+                                    color: const Color(
+                                      0xFFF15A24,
+                                    ).withValues(alpha: 0.9),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Row(
