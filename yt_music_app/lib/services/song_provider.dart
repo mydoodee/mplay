@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/song.dart';
 import '../models/playlist.dart';
 import 'api_service.dart';
@@ -51,6 +54,11 @@ class SongProvider with ChangeNotifier {
 
   final List<String> _addedFolders = [];
   List<String> get addedFolders => _addedFolders;
+
+  // Download State
+  final Map<String, double> _downloadProgress = {}; // videoId → 0.0-1.0
+  Map<String, double> get downloadProgress => Map.unmodifiable(_downloadProgress);
+  final Set<String> _downloadingIds = {};
 
   SongProvider() {
     // Initialize lazily or after the first frame
@@ -472,5 +480,111 @@ class SongProvider with ChangeNotifier {
     await _dbHelper.removeFromHistory(song.id);
     _history.removeWhere((s) => s.id == song.id);
     notifyListeners();
+  }
+
+  // ─── Download ───
+
+  /// ตรวจสอบว่าเพลงนี้ download แล้วหรือยัง
+  bool isDownloaded(String videoId) {
+    return _localSongs.any((s) =>
+        s.filePath != null && s.filePath!.contains(videoId));
+  }
+
+  /// ตรวจสอบว่ากำลัง download อยู่หรือไม่
+  bool isDownloading(String videoId) {
+    return _downloadingIds.contains(videoId);
+  }
+
+  /// ดาวน์โหลดเพลงจาก YouTube แล้วบันทึกเป็นไฟล์ local
+  Future<bool> downloadSong(Song song) async {
+    if (song.isLocal) return false;
+    if (isDownloaded(song.id)) return false;
+    if (_downloadingIds.contains(song.id)) return false;
+
+    _downloadingIds.add(song.id);
+    _downloadProgress[song.id] = 0.0;
+    notifyListeners();
+
+    try {
+      // 1. ดึง direct audio URL จาก Server
+      final audioUrl = await _apiService.getAudioUrl(song.id);
+      if (audioUrl == null || audioUrl.isEmpty) {
+        throw Exception('ไม่สามารถดึง URL เพลงได้');
+      }
+
+      // 2. เตรียม path สำหรับบันทึกไฟล์ → Download/Mplay
+      Directory downloadDir;
+      if (Platform.isAndroid) {
+        downloadDir = Directory('/storage/emulated/0/Download/Mplay');
+      } else {
+        final dir = await getApplicationDocumentsDirectory();
+        downloadDir = Directory('${dir.path}/Mplay');
+      }
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
+      }
+
+      // ใช้ชื่อไฟล์จาก title (ลบอักขระพิเศษออก) + .m4a
+      final safeTitle = song.title.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+      final filePath = '${downloadDir.path}/$safeTitle.m4a';
+
+      // 3. ดาวน์โหลดไฟล์ด้วย Dio (throttle progress เพื่อไม่ให้ UI กระตุก)
+      final dio = Dio();
+      DateTime lastNotify = DateTime.now();
+      await dio.download(
+        audioUrl,
+        filePath,
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            _downloadProgress[song.id] = received / total;
+            // อัปเดต UI ไม่เกิน 2 ครั้ง/วินาที เพื่อประหยัด CPU
+            final now = DateTime.now();
+            if (now.difference(lastNotify).inMilliseconds > 500 ||
+                received == total) {
+              lastNotify = now;
+              notifyListeners();
+            }
+          }
+        },
+        options: Options(
+          headers: {'User-Agent': 'Mozilla/5.0'},
+          receiveTimeout: const Duration(minutes: 5),
+        ),
+      );
+
+      // 4. ตรวจสอบว่าไฟล์ถูกบันทึกสำเร็จ
+      final file = File(filePath);
+      if (!await file.exists() || await file.length() == 0) {
+        throw Exception('ไฟล์ download ไม่สมบูรณ์');
+      }
+
+      // 5. สร้าง Song object สำหรับ local file
+      final localSong = Song.fromLocalFile(
+        filePath: filePath,
+        title: song.title,
+        artist: song.artist,
+        duration: song.duration,
+      );
+
+      // 6. บันทึกเข้า local_songs DB + RAM list
+      final exists = _localSongs.any((s) => s.filePath == filePath);
+      if (!exists) {
+        _localSongs.insert(0, await _withCoverArt(localSong));
+        await _dbHelper.addLocalSong(localSong);
+      }
+
+      _downloadProgress[song.id] = 1.0;
+      _downloadingIds.remove(song.id);
+      notifyListeners();
+
+      if (kDebugMode) print('✅ Downloaded: ${song.title} → $filePath');
+      return true;
+    } catch (e) {
+      if (kDebugMode) print('❌ Download failed for ${song.title}: $e');
+      _downloadProgress.remove(song.id);
+      _downloadingIds.remove(song.id);
+      notifyListeners();
+      return false;
+    }
   }
 }

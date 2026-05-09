@@ -14,6 +14,9 @@ class SongTile extends StatelessWidget {
   final VoidCallback onFavoritePressed;
   final VoidCallback? onRemoveFromPlaylist;
   final bool isPlaying;
+  final VoidCallback? onDownload;
+  final bool isDownloaded;
+  final bool isDownloading;
 
   const SongTile({
     super.key,
@@ -23,6 +26,9 @@ class SongTile extends StatelessWidget {
     required this.onFavoritePressed,
     this.onRemoveFromPlaylist,
     this.isPlaying = false,
+    this.onDownload,
+    this.isDownloaded = false,
+    this.isDownloading = false,
   });
 
   String _formatDuration(int seconds) {
@@ -142,6 +148,32 @@ class SongTile extends StatelessWidget {
                     onRemoveFromPlaylist!();
                   },
                   iconColor: const Color(0xFFFF4466),
+                ),
+              // 📥 Download button — only for non-local songs
+              if (!song.isLocal && onDownload != null)
+                _menuItem(
+                  ctx,
+                  isDownloaded
+                      ? Icons.download_done_rounded
+                      : (isDownloading
+                          ? Icons.downloading_rounded
+                          : Icons.download_rounded),
+                  isDownloaded
+                      ? l10n.alreadyDownloaded
+                      : (isDownloading
+                          ? l10n.downloadingSong
+                          : l10n.downloadSong),
+                  isDownloaded || isDownloading
+                      ? () => Navigator.pop(ctx)
+                      : () {
+                          Navigator.pop(ctx);
+                          onDownload!();
+                        },
+                  iconColor: isDownloaded
+                      ? const Color(0xFF4CAF50)
+                      : (isDownloading
+                          ? const Color(0xFFFFA726)
+                          : Colors.white),
                 ),
               _menuItem(ctx, Icons.share_rounded, l10n.share, () {
                 Navigator.pop(ctx);
