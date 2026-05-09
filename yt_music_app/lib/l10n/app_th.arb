@@ -93,6 +93,7 @@
   "voiceNoSound": "ไม่ได้ยินเสียง: {error}",
   "voiceMicUnavailable": "ไมโครโฟนไม่พร้อมใช้งาน",
   "voiceListening": "กำลังฟัง...",
+  "voiceTapToStop": "แตะเพื่อหยุด",
 
   "adminSystemUsers": "ผู้ใช้งานระบบ",
   "adminOnlineCount": "ออนไลน์: {count} คน",

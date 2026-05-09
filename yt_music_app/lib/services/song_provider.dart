@@ -15,6 +15,8 @@ class SongProvider with ChangeNotifier {
 
   List<Song> _searchResults = [];
   List<Song> get searchResults => _searchResults;
+  List<String> _suggestions = [];
+  List<String> get suggestions => _suggestions;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -98,6 +100,8 @@ class SongProvider with ChangeNotifier {
   }
 
   Future<void> search(String query) async {
+    _suggestions = []; // Clear suggestions when searching
+    notifyListeners();
     if (query.isEmpty) return;
     _currentSearchQuery = query;
     _isLoading = true;
@@ -161,6 +165,22 @@ class SongProvider with ChangeNotifier {
       _isFetchingMore = false;
       notifyListeners();
     }
+  }
+
+  Future<void> fetchSuggestions(String query) async {
+    if (query.trim().isEmpty) {
+      _suggestions = [];
+      notifyListeners();
+      return;
+    }
+    final suggestions = await _apiService.getSearchSuggestions(query);
+    _suggestions = suggestions;
+    notifyListeners();
+  }
+
+  void clearSuggestions() {
+    _suggestions = [];
+    notifyListeners();
   }
 
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
