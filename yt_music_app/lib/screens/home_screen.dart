@@ -159,8 +159,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${l10n.downloadingSong} ${song.title}'),
-        backgroundColor: const Color.fromARGB(255, 199, 67, 1),
+        content: Text(
+          '${l10n.downloadingSong} ${song.title}',
+          style: const TextStyle(color: Color.fromARGB(255, 245, 84, 21)),
+        ),
+        backgroundColor: const Color.fromARGB(255, 123, 122, 122),
         duration: const Duration(seconds: 2),
       ),
     );
