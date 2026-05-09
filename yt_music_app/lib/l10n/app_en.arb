@@ -129,6 +129,7 @@
   },
   "voiceMicUnavailable": "Microphone is not available",
   "voiceListening": "Listening...",
+  "voiceTapToStop": "Tap to stop",
 
   "adminSystemUsers": "System Users",
   "adminOnlineCount": "Online: {count} users",

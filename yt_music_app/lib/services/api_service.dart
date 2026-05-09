@@ -52,6 +52,44 @@ class ApiService {
     }
   }
 
+  /// 🔍 Fetch search suggestions from YouTube's public API
+  Future<List<String>> getSearchSuggestions(String query) async {
+    if (query.trim().isEmpty) return [];
+    try {
+      final response = await _client.get(
+        Uri.parse(
+          'https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&q=${Uri.encodeComponent(query)}',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        // Response format is typically: window.google.ac.h(["query",[["suggestion1",0],["suggestion2",0]],...])
+        // Or sometimes just JSON: ["query",["suggestion1","suggestion2",...]]
+        final String body = response.body;
+        
+        // Simple regex to extract JSON part if it's wrapped in a callback
+        final jsonMatch = RegExp(r'\[.*\]').firstMatch(body);
+        if (jsonMatch != null) {
+          final List<dynamic> data = json.decode(jsonMatch.group(0)!);
+          if (data.length >= 2 && data[1] is List) {
+            return (data[1] as List).map((e) {
+              if (e is List && e.isNotEmpty) {
+                return e[0].toString(); // Extract just the text from [text, type, ...]
+              }
+              return e.toString();
+            }).toList();
+          }
+        }
+      }
+      return [];
+    } catch (e) {
+      if (kDebugMode) {
+        print('ApiService Error (Suggestions): $e');
+      }
+      return [];
+    }
+  }
+
   Future<Song?> getSongInfo(String videoId) async {
     try {
       final response = await _client
@@ -80,22 +118,22 @@ class ApiService {
   }
 
   /// 🎵 Get direct audio URL with retry
-  /// ลอง 2 ครั้ง เพื่อให้ได้ URL แน่ๆ
-  Future<String?> getAudioUrl(String videoId) async {
+  /// Returns Map: { 'url': String, 'isLive': bool, 'isHls': bool } or null
+  Future<Map<String, dynamic>?> getAudioUrl(String videoId) async {
     // Attempt 1
-    String? url = await _fetchAudioUrl(videoId);
-    if (url != null) return url;
+    Map<String, dynamic>? result = await _fetchAudioUrl(videoId);
+    if (result != null) return result;
 
     // Attempt 2 — retry once
     if (kDebugMode) {
       print('🔄 Retrying audio URL for: $videoId');
     }
     await Future.delayed(const Duration(milliseconds: 500));
-    url = await _fetchAudioUrl(videoId);
-    return url;
+    result = await _fetchAudioUrl(videoId);
+    return result;
   }
 
-  Future<String?> _fetchAudioUrl(String videoId) async {
+  Future<Map<String, dynamic>?> _fetchAudioUrl(String videoId) async {
     try {
       final response = await _client
           .get(Uri.parse(ApiConfig.audioUrl(videoId)))
@@ -107,7 +145,11 @@ class ApiService {
         );
         final url = data['url'] as String?;
         if (url != null && url.isNotEmpty) {
-          return url;
+          return {
+            'url': url,
+            'isLive': data['isLive'] == true,
+            'isHls': data['isHls'] == true,
+          };
         }
       }
       return null;
@@ -138,7 +180,13 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
         final Map<String, dynamic> urls = data['urls'] ?? {};
-        return urls.map((key, value) => MapEntry(key, value as String?));
+        // รองรับทั้ง String format เดิม และ Map format ใหม่ { url, isLive, isHls }
+        return urls.map((key, value) {
+          if (value is Map) {
+            return MapEntry(key, value['url'] as String?);
+          }
+          return MapEntry(key, value as String?);
+        });
       }
       return {};
     } catch (e) {

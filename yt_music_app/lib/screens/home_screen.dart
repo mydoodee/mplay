@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
@@ -17,6 +17,7 @@ import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
 import '../widgets/voice_search_button.dart';
+import '../widgets/voice_search_dialog.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
 import '../l10n/app_localizations.dart';
@@ -33,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
+
   int _selectedIndex = 0;
   String _appVersion = '';
   String _listeningText = ''; // real-time text จาก voice search
@@ -136,7 +138,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -184,12 +185,35 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    // หน่วงเวลา 1 วินาทีหลังจากพิมพ์ตัวอักษรตัวสุดท้ายเสร็จ ถึงจะเริ่มค้นหา
-    _debounce = Timer(const Duration(milliseconds: 1000), () {
+
+    // Fetch suggestions more quickly (500ms)
+    _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).search(query);
+        Provider.of<SongProvider>(
+          context,
+          listen: false,
+        ).fetchSuggestions(query);
+      } else {
+        Provider.of<SongProvider>(context, listen: false).clearSuggestions();
       }
     });
+  }
+
+  void _performSearch([String? query]) {
+    final q = query ?? _searchController.text.trim();
+    if (q.isEmpty) return;
+    _debounce?.cancel();
+    if (query != null && query != _searchController.text) {
+      _searchController.text = q;
+      _searchController.selection = TextSelection.fromPosition(
+        TextPosition(offset: q.length),
+      );
+    }
+    Provider.of<SongProvider>(context, listen: false).search(q);
+    // Hide keyboard and suggestions
+    FocusScope.of(context).unfocus();
+    Provider.of<SongProvider>(context, listen: false).clearSuggestions();
+  }
   }
 
   @override
@@ -356,6 +380,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
+              onSubmitted: _performSearch,
+              textInputAction: TextInputAction.search,
               textAlignVertical: TextAlignVertical.center,
               style: TextStyle(
                 color: Colors.white,
@@ -373,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Icon(
                     Icons.search_rounded,
-                    color: const Color(0xFFF15A24),
+                    color: const Color(0xFF555555),
                     size: isTablet ? 26 : 22,
                   ),
                 ),
@@ -382,6 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ปุ่ม Clear
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _searchController,
                       builder: (context, value, child) {
@@ -394,25 +421,62 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 onPressed: () {
                                   _searchController.clear();
-                                  _onSearchChanged('');
                                   setState(() => _listeningText = '');
+                                  Provider.of<SongProvider>(context, listen: false).clearSearch();
                                 },
                               )
                             : const SizedBox.shrink();
                       },
                     ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _searchController,
+                      builder: (context, value, child) {
+                        return value.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () => _performSearch(),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF15A24),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white,
+                                    size: isTablet ? 22 : 18,
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink();
+                      },
+                    ),
+                    // ปุ่มค้นหาด้วยเสียง (ใช้แบบเดิม)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: VoiceSearchButton(
-                        onListenStart: () {
-                          setState(() => _listeningText = '');
-                        },
-                        onResult: (text) {
-                          setState(() {
-                            _listeningText = '';
-                            _searchController.text = text;
-                          });
-                          _onSearchChanged(text);
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.mic_rounded,
+                          color: Color(0xFF888888),
+                          size: 22,
+                        ),
+                        onPressed: () async {
+                          final result = await showGeneralDialog<String>(
+                            context: context,
+                            barrierDismissible: true,
+                            barrierLabel: '',
+                            pageBuilder: (context, _, _) => VoiceSearchDialog(
+                              initialLocale: Localizations.localeOf(
+                                context,
+                              ).toString(),
+                            ),
+                          );
+                          if (result != null && result.isNotEmpty) {
+                            _performSearch(result);
+                          }
                         },
                       ),
                     ),
@@ -437,6 +501,56 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+        ),
+        // 🔍 Search Suggestions
+        Consumer<SongProvider>(
+          builder: (context, provider, child) {
+            if (provider.suggestions.isEmpty) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF222222)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: provider.suggestions.length.clamp(0, 8),
+                separatorBuilder: (context, index) => Divider(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                ),
+                itemBuilder: (context, index) {
+                  final suggestion = provider.suggestions[index];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(
+                      Icons.history_rounded,
+                      color: Color(0xFF555555),
+                      size: 18,
+                    ),
+                    title: Text(
+                      suggestion,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                    trailing: const Icon(
+                      Icons.north_west_rounded,
+                      color: Color(0xFF444444),
+                      size: 16,
+                    ),
+                    onTap: () => _performSearch(suggestion),
+                  );
+                },
+              ),
+            );
+          },
         ),
         // Real-time voice text hint
         if (_listeningText.isNotEmpty) ...[
@@ -670,7 +784,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             onTap: () => songProvider.playSong(
                               song,
                               queue: songProvider.history,
-                              index: songProvider.history.indexOf(song),
+                              index: songProvider.history.indexWhere(
+                                (s) => s.id == song.id,
+                              ),
                             ),
                             child: Container(
                               width: 150,
@@ -803,8 +919,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
                     onTap: () => songProvider.playSong(
                       song,
-                      queue: results,
-                      index: results.indexOf(song),
+                      queue: filteredResults,
+                      index: index,
                     ),
                     onDownload: song.isLocal
                         ? null

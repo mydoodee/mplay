@@ -590,6 +590,12 @@ abstract class AppLocalizations {
   /// **'Listening...'**
   String get voiceListening;
 
+  /// No description provided for @voiceTapToStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to stop'**
+  String get voiceTapToStop;
+
   /// No description provided for @adminSystemUsers.
   ///
   /// In en, this message translates to:

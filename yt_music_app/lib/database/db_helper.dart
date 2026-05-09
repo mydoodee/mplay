@@ -20,7 +20,7 @@ class DbHelper {
     String path = join(await getDatabasesPath(), 'yt_music.db');
     return await openDatabase(
       path,
-      version: 5,
+      version: 7,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -38,6 +38,7 @@ class DbHelper {
         duration INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         is_local INTEGER DEFAULT 0,
+        is_live INTEGER DEFAULT 0,
         file_path TEXT
       )
     ''');
@@ -53,6 +54,7 @@ class DbHelper {
         duration INTEGER,
         played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         is_local INTEGER DEFAULT 0,
+        is_live INTEGER DEFAULT 0,
         file_path TEXT
       )
     ''');
@@ -77,10 +79,19 @@ class DbHelper {
       await _createLocalSongsTable(db);
     }
     if (oldVersion < 5) {
-      // Ensure all tables have added_at or played_at/created_at correctly
       await _addColumnIfNotExists(db, 'playlist_songs', 'added_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
       await _addColumnIfNotExists(db, 'favorites', 'created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
       await _addColumnIfNotExists(db, 'history', 'played_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+    }
+    if (oldVersion < 6) {
+      // เพิ่ม is_live column สำหรับรองรับ Live Stream
+      await _addColumnIfNotExists(db, 'history', 'is_live', 'INTEGER DEFAULT 0');
+      await _addColumnIfNotExists(db, 'favorites', 'is_live', 'INTEGER DEFAULT 0');
+      await _addColumnIfNotExists(db, 'playlist_songs', 'is_live', 'INTEGER DEFAULT 0');
+    }
+    if (oldVersion < 7) {
+      // แก้ไขบั๊กสำหรับคนที่ล้างแอป/ลงใหม่ตอนเป็น v6 แล้วตาราง playlist_songs ขาดคอลัมน์ is_live
+      await _addColumnIfNotExists(db, 'playlist_songs', 'is_live', 'INTEGER DEFAULT 0');
     }
   }
 
@@ -116,6 +127,7 @@ class DbHelper {
         duration INTEGER,
         added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         is_local INTEGER DEFAULT 0,
+        is_live INTEGER DEFAULT 0,
         file_path TEXT,
         FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE
       )

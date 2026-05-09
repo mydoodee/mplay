@@ -274,6 +274,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get voiceListening => 'กำลังฟัง...';
 
   @override
+  String get voiceTapToStop => 'แตะเพื่อหยุด';
+
+  @override
   String get adminSystemUsers => 'ผู้ใช้งานระบบ';
 
   @override

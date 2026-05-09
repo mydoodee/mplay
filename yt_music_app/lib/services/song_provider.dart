@@ -18,6 +18,8 @@ class SongProvider with ChangeNotifier {
 
   List<Song> _searchResults = [];
   List<Song> get searchResults => _searchResults;
+  List<String> _suggestions = [];
+  List<String> get suggestions => _suggestions;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -106,6 +108,8 @@ class SongProvider with ChangeNotifier {
   }
 
   Future<void> search(String query) async {
+    _suggestions = []; // Clear suggestions when searching
+    notifyListeners();
     if (query.isEmpty) return;
     _currentSearchQuery = query;
     _isLoading = true;
@@ -124,6 +128,15 @@ class SongProvider with ChangeNotifier {
       _hasMoreResults = false;
     }
 
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// ล้างผลการค้นหา
+  void clearSearch() {
+    _searchResults = [];
+    _currentSearchQuery = '';
+    _hasMoreResults = true;
     _isLoading = false;
     notifyListeners();
   }
@@ -162,10 +175,31 @@ class SongProvider with ChangeNotifier {
     }
   }
 
+  Future<void> fetchSuggestions(String query) async {
+    if (query.trim().isEmpty) {
+      _suggestions = [];
+      notifyListeners();
+      return;
+    }
+    final suggestions = await _apiService.getSearchSuggestions(query);
+    _suggestions = suggestions;
+    notifyListeners();
+  }
+
+  void clearSuggestions() {
+    _suggestions = [];
+    notifyListeners();
+  }
+
   Future<void> playSong(Song song, {List<Song>? queue, int index = 0}) async {
     try {
       if (queue != null && queue.isNotEmpty) {
-        await audioHandler?.setQueue(queue, initialIndex: index);
+        // หา index จาก song.id เพื่อป้องกันกรณีที่ index ผิดหรือ indexOf คืน -1
+        final resolvedIndex = index >= 0 && index < queue.length
+            ? index
+            : queue.indexWhere((s) => s.id == song.id);
+        final safeIndex = resolvedIndex >= 0 ? resolvedIndex : 0;
+        await audioHandler?.setQueue(queue, initialIndex: safeIndex);
       } else {
         await audioHandler?.playSong(song);
       }
