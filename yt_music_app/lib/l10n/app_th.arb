@@ -197,5 +197,11 @@
     }
   },
   "exploreTitle": "สำรวจ",
-  "exploreSubtitle": "พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ"
+  "exploreSubtitle": "พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ",
+
+  "downloadSong": "ดาวน์โหลด",
+  "downloadingSong": "กำลังดาวน์โหลด...",
+  "downloadComplete": "ดาวน์โหลดเสร็จ! เพิ่มลงในไฟล์เพลงแล้ว",
+  "downloadError": "ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่",
+  "alreadyDownloaded": "ดาวน์โหลดแล้ว"
 }

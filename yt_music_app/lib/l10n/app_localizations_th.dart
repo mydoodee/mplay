@@ -485,4 +485,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get exploreSubtitle => 'พบกับแนวเพลงที่เหมาะกับอารมณ์ของคุณ';
+
+  @override
+  String get downloadSong => 'ดาวน์โหลด';
+
+  @override
+  String get downloadingSong => 'กำลังดาวน์โหลด...';
+
+  @override
+  String get downloadComplete => 'ดาวน์โหลดเสร็จ! เพิ่มลงในไฟล์เพลงแล้ว';
+
+  @override
+  String get downloadError => 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่';
+
+  @override
+  String get alreadyDownloaded => 'ดาวน์โหลดแล้ว';
 }

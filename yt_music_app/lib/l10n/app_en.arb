@@ -262,5 +262,11 @@
     }
   },
   "exploreTitle": "Explore",
-  "exploreSubtitle": "Find the perfect music for your mood"
+  "exploreSubtitle": "Find the perfect music for your mood",
+
+  "downloadSong": "Download",
+  "downloadingSong": "Downloading...",
+  "downloadComplete": "Download complete! Added to Local Files",
+  "downloadError": "Download failed. Please try again",
+  "alreadyDownloaded": "Already downloaded"
 }
