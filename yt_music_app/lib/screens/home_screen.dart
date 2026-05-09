@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../models/song.dart';
@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
+
   int _selectedIndex = 0;
   String _appVersion = '';
   String _listeningText = ''; // real-time text จาก voice search
@@ -137,39 +138,82 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _scrollController.dispose();
-    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  /// 📥 จัดการ download เพลงพร้อมแสดง SnackBar
+  void _handleDownload(Song song) async {
+    final songProvider = Provider.of<SongProvider>(context, listen: false);
+    final l10n = AppLocalizations.of(context)!;
+
+    if (songProvider.isDownloaded(song.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.alreadyDownloaded),
+          backgroundColor: const Color(0xFF4CAF50),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${l10n.downloadingSong} ${song.title}',
+          style: const TextStyle(color: Color.fromARGB(255, 245, 84, 21)),
+        ),
+        backgroundColor: const Color.fromARGB(255, 123, 122, 122),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+
+    final success = await songProvider.downloadSong(song);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? l10n.downloadComplete : l10n.downloadError),
+        backgroundColor: success
+            ? const Color(0xFF4CAF50)
+            : const Color(0xFFE53935),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    
+
     // Fetch suggestions more quickly (500ms)
     _debounce = Timer(const Duration(milliseconds: 500), () {
       if (query.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).fetchSuggestions(query);
+        Provider.of<SongProvider>(
+          context,
+          listen: false,
+        ).fetchSuggestions(query);
       } else {
         Provider.of<SongProvider>(context, listen: false).clearSuggestions();
       }
     });
-
-    // Actual search still takes 1000ms if you stop typing
-    // (or we can let user press Enter/Search button)
-    // For now, let's keep it as is or improve it.
   }
 
-  void _performSearch(String query) {
-    if (query.isEmpty) return;
+  void _performSearch([String? query]) {
+    final q = query ?? _searchController.text.trim();
+    if (q.isEmpty) return;
     _debounce?.cancel();
-    _searchController.text = query;
-    _searchController.selection = TextSelection.fromPosition(
-      TextPosition(offset: query.length),
-    );
-    Provider.of<SongProvider>(context, listen: false).search(query);
+    if (query != null && query != _searchController.text) {
+      _searchController.text = q;
+      _searchController.selection = TextSelection.fromPosition(
+        TextPosition(offset: q.length),
+      );
+    }
+    Provider.of<SongProvider>(context, listen: false).search(q);
     // Hide keyboard and suggestions
     FocusScope.of(context).unfocus();
     Provider.of<SongProvider>(context, listen: false).clearSuggestions();
+  }
   }
 
   @override
@@ -355,7 +399,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   child: Icon(
                     Icons.search_rounded,
-                    color: const Color(0xFFF15A24),
+                    color: const Color(0xFF555555),
                     size: isTablet ? 26 : 22,
                   ),
                 ),
@@ -364,6 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ปุ่ม Clear
                     ValueListenableBuilder<TextEditingValue>(
                       valueListenable: _searchController,
                       builder: (context, value, child) {
@@ -376,24 +421,57 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 onPressed: () {
                                   _searchController.clear();
-                                  _onSearchChanged('');
                                   setState(() => _listeningText = '');
+                                  Provider.of<SongProvider>(context, listen: false).clearSearch();
                                 },
                               )
                             : const SizedBox.shrink();
                       },
                     ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _searchController,
+                      builder: (context, value, child) {
+                        return value.text.isNotEmpty
+                            ? GestureDetector(
+                                onTap: () => _performSearch(),
+                                child: Container(
+                                  margin: const EdgeInsets.only(right: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF15A24),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Icon(
+                                    Icons.search_rounded,
+                                    color: Colors.white,
+                                    size: isTablet ? 22 : 18,
+                                  ),
+                                ),
+                              )
+                            : const SizedBox.shrink();
+                      },
+                    ),
+                    // ปุ่มค้นหาด้วยเสียง (ใช้แบบเดิม)
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: IconButton(
-                        icon: const Icon(Icons.mic_rounded, color: Color(0xFF888888), size: 22),
+                        icon: const Icon(
+                          Icons.mic_rounded,
+                          color: Color(0xFF888888),
+                          size: 22,
+                        ),
                         onPressed: () async {
                           final result = await showGeneralDialog<String>(
                             context: context,
                             barrierDismissible: true,
                             barrierLabel: '',
-                            pageBuilder: (context, _, __) => VoiceSearchDialog(
-                              initialLocale: Localizations.localeOf(context).toString(),
+                            pageBuilder: (context, _, _) => VoiceSearchDialog(
+                              initialLocale: Localizations.localeOf(
+                                context,
+                              ).toString(),
                             ),
                           );
                           if (result != null && result.isNotEmpty) {
@@ -450,12 +528,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   final suggestion = provider.suggestions[index];
                   return ListTile(
                     dense: true,
-                    leading: const Icon(Icons.history_rounded, color: Color(0xFF555555), size: 18),
+                    leading: const Icon(
+                      Icons.history_rounded,
+                      color: Color(0xFF555555),
+                      size: 18,
+                    ),
                     title: Text(
                       suggestion,
-                      style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
                     ),
-                    trailing: const Icon(Icons.north_west_rounded, color: Color(0xFF444444), size: 16),
+                    trailing: const Icon(
+                      Icons.north_west_rounded,
+                      color: Color(0xFF444444),
+                      size: 16,
+                    ),
                     onTap: () => _performSearch(suggestion),
                   );
                 },
@@ -635,10 +724,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 1. HYBRID RECENTLY PLAYED SECTION
     if (_selectedIndex == 0 && songProvider.history.isNotEmpty) {
-      // Filter out current song only when the "Now Playing" card is visible (Index 0 or 1)
-      // to avoid duplication. For other tabs, we don't need to filter.
-      final bool shouldFilter = _selectedIndex == 0 || _selectedIndex == 1;
-
       final filteredFullHistory = songProvider.history.toList();
 
       final topHistory = filteredFullHistory.take(5).toList();
@@ -794,6 +879,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         queue: songProvider.history,
                         index: songProvider.history.indexOf(song),
                       ),
+                      onDownload: song.isLocal
+                          ? null
+                          : () => _handleDownload(song),
+                      isDownloaded: songProvider.isDownloaded(song.id),
+                      isDownloading: songProvider.isDownloading(song.id),
                     ),
                   ),
                 ),
@@ -827,7 +917,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     isPlaying: song.id == currentSong?.id,
                     isFavorite: isFavorite,
                     onFavoritePressed: () => songProvider.toggleFavorite(song),
-                    onTap: () => songProvider.playSong(song),
+                    onTap: () => songProvider.playSong(
+                      song,
+                      queue: filteredResults,
+                      index: index,
+                    ),
+                    onDownload: song.isLocal
+                        ? null
+                        : () => _handleDownload(song),
+                    isDownloaded: songProvider.isDownloaded(song.id),
+                    isDownloading: songProvider.isDownloading(song.id),
                   ),
                 ),
               ),
@@ -838,88 +937,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return slivers;
-  }
-
-  Widget _buildNowPlayingSection(
-    SongProvider songProvider,
-    List<Song> results,
-  ) {
-    final l10n = AppLocalizations.of(context)!;
-    final currentSong = songProvider.currentSong;
-    if (currentSong == null) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.play_circle_fill_rounded,
-                color: Color(0xFFF15A24),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                l10n.nowPlaying,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-        _buildActivePlayingCard(
-          songProvider,
-          currentSong,
-          queue: songProvider.history.isNotEmpty
-              ? songProvider.history
-              : (results.isNotEmpty ? results : [currentSong]),
-          index: 0,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActivePlayingCard(
-    SongProvider songProvider,
-    Song song, {
-    required List<Song> queue,
-    required int index,
-  }) {
-    final hPad = Responsive.hPadding(context);
-    final maxW = Responsive.contentMaxWidth(context);
-    final isFavorite = songProvider.favorites.any((s) => s.id == song.id);
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxW),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A0D00),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: const Color(0xFFF15A24).withValues(alpha: 0.4),
-                width: 1,
-              ),
-            ),
-            child: SongTile(
-              song: song,
-              isPlaying: true,
-              isFavorite: isFavorite,
-              onFavoritePressed: () => songProvider.toggleFavorite(song),
-              onTap: () =>
-                  songProvider.playSong(song, queue: queue, index: index),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildBottomNav() {
@@ -1656,8 +1673,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF15A24)
-                                        .withValues(alpha: 0.9),
+                                    color: const Color(
+                                      0xFFF15A24,
+                                    ).withValues(alpha: 0.9),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: const Row(

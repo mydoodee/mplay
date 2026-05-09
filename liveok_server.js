@@ -194,7 +194,7 @@ async function resolveAudioUrl(videoId) {
         "--print",
         "%(is_live)s\t%(live_status)s\t%(url)s\t%(hls_manifest_url)s",
         "-f",
-        "bestaudio/best",
+        "ba[ext=m4a]/ba/b",
       ];
 
       let output = await runYtDlpLimited(infoArgs);

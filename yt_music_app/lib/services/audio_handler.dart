@@ -16,15 +16,8 @@ class MyAudioHandler extends BaseAudioHandler {
   // ใช้ ConcatenatingAudioSource เพื่อระบบ Gapless Playback
   final _playlist = ConcatenatingAudioSource(children: []);
   Timer? _positionTimer;
-  Timer? _loadingWatchdog;
-  Timer? _changingSongTimeout; // auto-reset _isChangingSong
-  bool _isChangingSong = false;
-  bool _isHandlingError = false; // ป้องกัน handlePlaybackError ซ้อนกัน
-  static const int _maxQueueSize = 200; // จำกัดขนาด queue
-
-  // 🔴 Circuit breaker: นับความล้มเหลวต่อเนื่องของแต่ละเพลง
-  final Map<String, int> _songFailureCount = {};
-  static const int _maxSongFailures = 2; // ถ้าล้มเหลวเกินนี้ → skip
+  Timer? _loadingWatchdog; // ตรวจจับกรณีที่ player ค้างอยู่ที่ loading นานเกินไป
+  bool _isChangingSong = false; // ป้องกัน race condition
 
   MyAudioHandler() {
     _player = AudioPlayer(
@@ -51,7 +44,18 @@ class MyAudioHandler extends BaseAudioHandler {
 
   Future<void> _init() async {
     await _player.setAudioSource(_playlist);
-    _player.playbackEventStream.listen(_broadcastState);
+    _player.playbackEventStream.listen(
+      _broadcastState,
+      onError: (Object e, StackTrace st) {
+        // 🔧 ป้องกัน Unhandled Exception จาก playback errors
+        if (kDebugMode) print('🎵 PlaybackEvent error (broadcast): $e');
+      },
+    );
+
+    // อัพเดทปุ่มเล่น/หยุดเมื่อสถานะการเล่นเปลี่ยน
+    _player.playingStream.listen((playing) {
+      _broadcastState(_player.playbackEvent);
+    });
 
     // Sync shuffle mode changes -> update UI button state
     _player.shuffleModeEnabledStream.listen((enabled) {
@@ -129,30 +133,13 @@ class MyAudioHandler extends BaseAudioHandler {
 
     // ตรวจจับ state ของ player
     _player.playerStateStream.listen((state) {
-      // 🔧 เมื่อ playlist เล่นจบทั้งหมด (completed) — ไม่ต้อง recover ใดๆ
-      if (state.processingState == ProcessingState.completed) {
-        if (kDebugMode) print('⏹️ Playlist completed — all songs done');
-        return;
-      }
-
-      // 🔧 idle ที่ไม่คาดคิด (ไม่ใช่ระหว่างเปลี่ยนเพลง)
-      if (state.processingState == ProcessingState.idle && !_isChangingSong) {
-        Future.delayed(const Duration(milliseconds: 800), () {
-          if (_player.processingState != ProcessingState.idle ||
-              _isChangingSong)
-            return;
-          if (_player.playing) return;
-
-          // ลอง advance ไปเพลงถัดไปก่อน
-          final currentIdx = _player.currentIndex ?? 0;
-          final nextIdx = currentIdx + 1;
-          if (nextIdx < queue.value.length) {
-            if (kDebugMode)
-              print('🔄 Idle detected — advancing to next song ($nextIdx)');
-            _safeSkipToIndex(nextIdx);
-          } else {
-            // ไม่มีเพลงถัดไป — ลอง recover เพลงปัจจุบัน
-            if (kDebugMode) print('🔄 Idle detected — recovering current song');
+      if (state.processingState == ProcessingState.idle &&
+          _isChangingSong == false) {
+        // Player กลับมา idle โดยไม่ได้ตั้งใจ (ไม่ใช่ระหว่างเปลี่ยนเพลง)
+        // รอแล้ว recover
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (_player.processingState == ProcessingState.idle &&
+              !_player.playing) {
             _recoverIdlePlayer();
           }
         });
@@ -167,7 +154,8 @@ class MyAudioHandler extends BaseAudioHandler {
 
     // 🔴 Circuit breaker: ป้องกัน handlePlaybackError ทำงานซ้อนกัน
     if (_isHandlingError) {
-      if (kDebugMode) print('⚠️ Already handling error — skipping duplicate call');
+      if (kDebugMode)
+        print('⚠️ Already handling error — skipping duplicate call');
       return;
     }
     _isHandlingError = true;
@@ -176,62 +164,115 @@ class MyAudioHandler extends BaseAudioHandler {
     final failCount = (_songFailureCount[currentItem.id] ?? 0) + 1;
     _songFailureCount[currentItem.id] = failCount;
 
-    if (kDebugMode) print('🔴 Song failure count: $failCount for ${currentItem.id}');
+    if (kDebugMode)
+      print('🔴 Song failure count: $failCount for ${currentItem.id}');
 
     // ถ้าล้มเหลวเกิน limit → skip ไปเพลงถัดไปทันที ไม่ลอง recover
     if (failCount >= _maxSongFailures) {
       if (kDebugMode) print('🚫 Circuit breaker: skipping stuck song → next');
       _isHandlingError = false;
       _songFailureCount.remove(currentItem.id); // reset สำหรับเพลงนี้
-      final nextIdx = (_player.currentIndex ?? 0) + 1;
-      if (nextIdx < queue.value.length) {
-        _safeSkipToIndex(nextIdx);
-      }
+      _autoSkipToNext();
       return;
     }
 
     Future.delayed(const Duration(seconds: 1), () async {
-      try {
-        if (!_player.playing) {
-          if (kDebugMode)
-            print('🔄 Attempting direct URL recovery for: ${currentItem.id}');
-          final result = await ApiService().getAudioUrl(currentItem.id);
-          if (result != null) {
-            final directUrl = result['url'] as String;
-            final isLive = result['isLive'] == true;
+      if (!_player.playing) {
+        if (kDebugMode)
+          print('🔄 Attempting direct URL recovery for: ${currentItem.id}');
+        try {
+          final directUrl = await ApiService().getAudioUrl(currentItem.id);
+          if (directUrl != null) {
             final newSource = AudioSource.uri(
               Uri.parse(directUrl),
               tag: currentItem,
-              headers: {
-                'User-Agent': 'Mozilla/5.0',
-                if (isLive) 'Accept-Encoding': 'identity',
-              },
+              headers: {'User-Agent': 'Mozilla/5.0'},
             );
-            // Live stream — ไม่ buffer มาก seek และ play ทันที
-            if (isLive) {
-              await _playlist.removeAt(_player.currentIndex ?? 0);
-              await _playlist.insert(_player.currentIndex ?? 0, newSource);
+
+            final index = _player.currentIndex ?? 0;
+            if (index < _playlist.length) {
+              // Replace failing source with direct URL
+              await _playlist.removeAt(index);
+              await _playlist.insert(index, newSource);
+              await _player.seek(Duration.zero, index: index);
               await _player.play();
-            } else {
-              final index = _player.currentIndex ?? 0;
-              if (index < _playlist.length) {
-                await _playlist.removeAt(index);
-                await _playlist.insert(index, newSource);
-                await _player.seek(Duration.zero, index: index);
-                await _player.play();
-              }
             }
           } else {
-            if (kDebugMode) print('❌ Direct recovery failed: No direct URL found');
+            if (kDebugMode)
+              print('❌ Direct recovery failed: No direct URL found');
+            await _recoverIdlePlayer();
           }
+        } catch (e) {
+          if (kDebugMode) print('❌ Direct recovery failed: $e');
+          await _recoverIdlePlayer();
+        }
+        final result = await ApiService().getAudioUrl(currentItem.id);
+        if (result != null) {
+          final directUrl = result['url'] as String;
+          final isLive = result['isLive'] == true;
+          final newSource = AudioSource.uri(
+            Uri.parse(directUrl),
+            tag: currentItem,
+            headers: {
+              'User-Agent': 'Mozilla/5.0',
+              if (isLive) 'Accept-Encoding': 'identity',
+            },
+          );
+
+          final index = _player.currentIndex ?? 0;
+          if (index < _playlist.length) {
+            await _playlist.removeAt(index);
+            await _playlist.insert(index, newSource);
+          }
+
+          // 🔧 หลัง source error ต้อง stop + setAudioSource ใหม่เสมอ
+          // เพราะ ExoPlayer อาจอยู่ state ใดก็ได้ (idle/buffering/loading)
+          // แค่ seek() ไม่พอ — ต้อง reinitialize ทั้งหมด
+          if (kDebugMode) print('🔧 Recovery: stop + reinitialize player');
+          try { await _player.stop(); } catch (_) {}
+          await _player
+              .setAudioSource(
+                _playlist,
+                initialIndex: index,
+                initialPosition: Duration.zero,
+              )
+              .timeout(
+                const Duration(seconds: 15),
+                onTimeout: () {
+                  // 🔧 ต้อง throw exception เพื่อข้ามการเรียก await _player.play() ด้านล่าง
+                  // ไปเข้า catch block และ skip ทันที
+                  throw TimeoutException('setAudioSource stuck > 15s');
+                },
+              );
+          _player.play();
+          if (kDebugMode) print('✅ Recovery success: playing index=$index');
+        } else {
+          if (kDebugMode)
+            print('❌ Direct recovery failed: No URL → auto-skip next');
+          _autoSkipToNext();
         }
       } catch (e) {
-        if (kDebugMode) print('❌ Direct recovery failed: $e');
+        if (kDebugMode) print('❌ Direct recovery failed: $e → auto-skip next');
+        _autoSkipToNext();
       } finally {
+        _endChangingSong();
         _isHandlingError = false;
       }
     });
+
   }
+
+  /// Skip ไปเพลงถัดไปอัตโนมัติ (ใช้เมื่อ recovery ล้มเหลว)
+  void _autoSkipToNext() {
+    final nextIdx = (_player.currentIndex ?? 0) + 1;
+    if (nextIdx < queue.value.length) {
+      if (kDebugMode) print('⏭️ Auto-skipping to next song at index $nextIdx');
+      _safeSkipToIndex(nextIdx);
+    } else if (kDebugMode) {
+      print('⚠️ No more songs to auto-skip to');
+    }
+  }
+
 
   /// ดึง player กลับมาเล่นเมื่อหลุดไปอยู่ใน idle state
   Future<void> _recoverIdlePlayer() async {
@@ -255,9 +296,12 @@ class MyAudioHandler extends BaseAudioHandler {
       if (_player.processingState == ProcessingState.loading ||
           _player.processingState == ProcessingState.buffering) {
         if (kDebugMode) print('⚠️ Loading watchdog triggered — player stuck');
-        // ถ้ากำลัง handle error อยู่แล้ว ไม่ต้องยิงซ้ำ
+        // 🔧 ถ้า recovery เองค้าง → force skip ไปเพลงถัดไปเลย
         if (_isHandlingError) {
-          if (kDebugMode) print('⚠️ Watchdog skipped — error handler already running');
+          if (kDebugMode)
+            print('⚠️ Watchdog: recovery stuck → force auto-skip next');
+          _isHandlingError = false;
+          _autoSkipToNext();
           return;
         }
         _forceResetIfStuck();
@@ -275,13 +319,15 @@ class MyAudioHandler extends BaseAudioHandler {
     _changingSongTimeout?.cancel();
     _isChangingSong = true;
     // Live stream ใช้ 60s เพราะ HLS buffer นานกว่าเพลงปกติ
+    // เพลงปกติใช้ 20s เพื่อให้ครอบคลุม timeout ของ network (15s)
     final duration = isLive
         ? const Duration(seconds: 60)
-        : const Duration(seconds: 10);
+        : const Duration(seconds: 20);
     _changingSongTimeout = Timer(duration, () {
       if (_isChangingSong) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print('⚠️ _isChangingSong timeout — force reset (isLive=$isLive)');
+        }
         _isChangingSong = false;
       }
     });
@@ -308,7 +354,7 @@ class MyAudioHandler extends BaseAudioHandler {
       if (currentIdx < _playlist.length) {
         try {
           await _player.seek(Duration.zero, index: currentIdx);
-          await _player.play();
+          _player.play();
           if (kDebugMode) print('✅ Force reset succeeded');
         } catch (e) {
           if (kDebugMode) print('❌ Force reset failed: $e');
@@ -361,8 +407,9 @@ class MyAudioHandler extends BaseAudioHandler {
           headers: {'User-Agent': 'Mozilla/5.0'},
         );
       }
-      if (kDebugMode)
+      if (kDebugMode) {
         print('➕ Adding missing source at idx=$idx: ${item.title}');
+      }
       await _playlist.add(source);
     }
   }
@@ -379,7 +426,7 @@ class MyAudioHandler extends BaseAudioHandler {
     try {
       await _ensurePlaylistHasIndex(index);
       await _player.seek(Duration.zero, index: index);
-      await _player.play();
+      _player.play();
     } catch (e) {
       if (kDebugMode) print('❌ safeSkipToIndex($index) error: $e');
       _handlePlaybackError();
@@ -392,7 +439,9 @@ class MyAudioHandler extends BaseAudioHandler {
     // หยุด pre-cache ถ้า player กำลังมีปัญหา ป้องกัน flood server
     if (_isHandlingError || _isChangingSong) return;
     if (_player.processingState == ProcessingState.loading ||
-        _player.processingState == ProcessingState.buffering) return;
+        _player.processingState == ProcessingState.buffering) {
+      return;
+    }
 
     for (int offset = 1; offset <= 2; offset++) {
       int nextIndex = currentIndex + offset;
@@ -429,8 +478,9 @@ class MyAudioHandler extends BaseAudioHandler {
     mediaItem.add(item);
 
     if (!song.isLocal && song.duration == 0) {
-      if (kDebugMode)
+      if (kDebugMode) {
         print('ℹ️ Song has no duration (may be live): ${song.title}');
+      }
     }
 
     if (existingIndex != -1) {
@@ -438,7 +488,7 @@ class MyAudioHandler extends BaseAudioHandler {
       _startChangingSongGuard();
       try {
         await _player.seek(Duration.zero, index: existingIndex);
-        await _player.play();
+        _player.play();
         _onPlaybackStartedSuccessfully(song.id);
       } catch (e) {
         if (kDebugMode) print('❌ Seek to existing error: $e');
@@ -467,8 +517,9 @@ class MyAudioHandler extends BaseAudioHandler {
                 .timeout(const Duration(seconds: 15));
             if (result != null) {
               streamUri = result['url'] as String;
-              if (kDebugMode)
+              if (kDebugMode) {
                 print('✅ Got live/HLS URL: isLive=${result['isLive']}');
+              }
             }
           } catch (e) {
             if (kDebugMode) print('⚠️ Live URL fetch failed, using proxy: $e');
@@ -483,50 +534,35 @@ class MyAudioHandler extends BaseAudioHandler {
           headers: {
             'User-Agent': 'Mozilla/5.0',
             // ป้องกัน ExoPlayer GZIP double-decompress บน HLS manifest
-            if (song.isLive || song.duration == 0) 'Accept-Encoding': 'identity',
+            if (song.isLive || song.duration == 0)
+              'Accept-Encoding': 'identity',
           },
         );
       }
 
-      _startChangingSongGuard(isLive: song.isLive);
-      try {
-        await Future(() async {
-          await _playlist.add(source);
-          if (song.isLive) {
-            // Live: ไม่ seek ไป Duration.zero เพราะ live ไม่มีจุดเริ่ม
-            await _player.seek(null, index: targetIndex);
-          } else {
-            await _player.seek(Duration.zero, index: targetIndex);
-          }
-          await _player.play();
-          _onPlaybackStartedSuccessfully(song.id);
-        }).timeout(
-          // Live: ใช้ 60s เพราะ HLS ต้องโหลด manifest + buffer segment
-          song.isLive
-              ? const Duration(seconds: 60)
-              : const Duration(seconds: 15),
-          onTimeout: () {
-            final state = _player.processingState;
-            // ถ้าเล่นอยู่เรียบร้อย (ready/buffering) — ไม่ต้อง reset
-            if (state == ProcessingState.ready ||
-                state == ProcessingState.buffering) {
-              if (kDebugMode)
-                print('ℹ️ Live timeout — player is $state, releasing guard only');
-              _endChangingSong(); // แค่ release guard ไม่ต้อง reset
-            } else {
-              if (kDebugMode)
-                print('⏱ playSong timeout — source may be live/broken (state=$state)');
-              _forceResetIfStuck();
-            }
-          },
-        );
-        unawaited(_trimOldSources());
-      } catch (e) {
-        if (kDebugMode) print('❌ Playback error in playSong: $e');
-        _handlePlaybackError();
-      } finally {
-        _endChangingSong();
-      }
+      _isChangingSong = true;
+      // 🚀 add + seek + play แบบ non-blocking — ไม่รอ I/O
+      unawaited(
+        _playlist
+            .add(source)
+            .then((_) async {
+              try {
+                await _player.seek(
+                  Duration.zero,
+                  index: targetIndex,
+                ); // ✅ ใช้ index ที่ capture ไว้
+                await _player.play();
+              } catch (e) {
+                if (kDebugMode) print('❌ Playback error in playSong: $e');
+              } finally {
+                _isChangingSong = false;
+              }
+            })
+            .catchError((e) {
+              _isChangingSong = false;
+              if (kDebugMode) print('❌ Playlist add error: $e');
+            }),
+      );
     }
   }
 
@@ -553,6 +589,7 @@ class MyAudioHandler extends BaseAudioHandler {
       ApiService().getAudioUrl(firstSong.id).catchError((_) => null);
     }
 
+    // 🚀 Step 3: สร้าง source เพลงแรก
     final AudioSource firstSource =
         firstSong.isLocal && firstSong.filePath != null
         ? AudioSource.file(firstSong.filePath!, tag: firstItem)
@@ -596,68 +633,87 @@ class MyAudioHandler extends BaseAudioHandler {
       if (!songs[i].isLocal) nextBatchIds.add(songs[i].id);
     }
 
-    Map<String, String?> directUrls = {};
     if (nextBatchIds.isNotEmpty) {
       try {
-        directUrls = await ApiService().batchResolveUrls(nextBatchIds);
+        await ApiService().batchResolveUrls(nextBatchIds);
       } catch (e) {
         if (kDebugMode) print('❌ Batch resolve failed: $e');
       }
-    }
 
-    final otherSources = <AudioSource>[];
-
-    // เพลงก่อน initialIndex (ใช้ streamUrl ปกติเพราะโอกาสเล่นน้อยกว่า)
-    for (int i = 0; i < initialIndex; i++) {
-      final s = songs[i];
-      otherSources.add(
-        s.isLocal && s.filePath != null
-            ? AudioSource.file(s.filePath!, tag: items[i])
-            : AudioSource.uri(
-                Uri.parse(ApiConfig.streamUrl(s.id)),
-                tag: items[i],
-                headers: {'User-Agent': 'Mozilla/5.0'},
-              ),
-      );
-    }
-
-    // เพลงหลัง initialIndex (ใช้ streamUrl ปกติ แต่ Server จะมี Cache แล้วเพราะเราสั่ง batchResolve)
-    for (int i = initialIndex + 1; i < songs.length; i++) {
-      final s = songs[i];
-      otherSources.add(
-        s.isLocal && s.filePath != null
-            ? AudioSource.file(s.filePath!, tag: items[i])
-            : AudioSource.uri(
-                Uri.parse(ApiConfig.streamUrl(s.id)),
-                tag: items[i],
-                headers: {'User-Agent': 'Mozilla/5.0'},
-              ),
-      );
-    }
-
-    // insert เพลงก่อน initialIndex ที่ตำแหน่ง 0
-    if (initialIndex > 0) {
-      await _playlist.insertAll(0, otherSources.sublist(0, initialIndex));
-      // 🔧 หลัง insert: seek ไป initialIndex โดยคงตำแหน่งเวลาเดิมไว้
-      // ไม่ reset เป็น Duration.zero เพื่อไม่ให้กระโดดกลับต้นเพลง
-      final currentPosition = _player.position;
-      final currentIdx = _player.currentIndex ?? 0;
-      if (currentIdx < initialIndex) {
-        await _player.seek(currentPosition, index: initialIndex);
+      if (nextBatchIds.isNotEmpty) {
+        try {
+          await ApiService().batchResolveUrls(nextBatchIds);
+        } catch (e) {
+          if (kDebugMode) print('❌ Batch resolve failed: $e');
+        }
       }
     }
     // add เพลงหลัง initialIndex
-    // otherSources = [เพลงก่อน initialIndex (0..initialIndex-1)] + [เพลงหลัง (initialIndex+1..end)]
-    // ถ้า initialIndex > 0 → afterSources เริ่มที่ position = initialIndex (ข้ามส่วนก่อนหน้าที่ insertAll ไปแล้ว)
-    // ถ้า initialIndex == 0 → ไม่มีเพลงก่อนหน้า afterSources เริ่มที่ 0
     if (initialIndex + 1 < songs.length) {
-      final afterStartOffset = initialIndex > 0 ? initialIndex : 0;
-      if (afterStartOffset < otherSources.length) {
-        final afterSources = otherSources.sublist(afterStartOffset);
-        if (afterSources.isNotEmpty) {
-          await _playlist.addAll(afterSources);
+      final afterSources = otherSources.sublist(
+        initialIndex > 0 ? initialIndex : 0,
+      );
+      if (afterSources.isNotEmpty) {
+        await _playlist.addAll(afterSources);
+      }
+
+      // เพลงหลัง initialIndex (ใช้ streamUrl ปกติ แต่ Server จะมี Cache แล้วเพราะเราสั่ง batchResolve)
+      for (int i = initialIndex + 1; i < songs.length; i++) {
+        final s = songs[i];
+        otherSources.add(
+          s.isLocal && s.filePath != null
+              ? AudioSource.file(s.filePath!, tag: items[i])
+              : AudioSource.uri(
+                  Uri.parse(ApiConfig.streamUrl(s.id)),
+                  tag: items[i],
+                  headers: {'User-Agent': 'Mozilla/5.0'},
+                ),
+        );
+      }
+
+      // insert เพลงก่อน initialIndex ที่ตำแหน่ง 0
+      if (initialIndex > 0) {
+        await _playlist.insertAll(0, otherSources.sublist(0, initialIndex));
+        // 🔧 หลัง insert: seek ไป initialIndex โดยคงตำแหน่งเวลาเดิมไว้
+        // ไม่ reset เป็น Duration.zero เพื่อไม่ให้กระโดดกลับต้นเพลง
+        final currentPosition = _player.position;
+        final currentIdx = _player.currentIndex ?? 0;
+        if (currentIdx < initialIndex) {
+          await _player.seek(currentPosition, index: initialIndex);
         }
       }
+
+      // add เพลงหลัง initialIndex
+      if (initialIndex + 1 < songs.length) {
+        final afterStartOffset = initialIndex > 0 ? initialIndex : 0;
+        if (afterStartOffset < otherSources.length) {
+          final afterSources = otherSources.sublist(afterStartOffset);
+          if (afterSources.isNotEmpty) {
+            try {
+              await _playlist.addAll(afterSources);
+              if (kDebugMode) {
+                print('✅ Loaded ${afterSources.length} remaining sources → '
+                    'playlistLen=${_playlist.length}');
+              }
+            } catch (e) {
+              // 🔧 addAll ล้มเหลว → ลองเพิ่มทีละเพลง
+              if (kDebugMode) print('⚠️ addAll failed: $e — adding one by one');
+              for (final source in afterSources) {
+                try {
+                  await _playlist.add(source);
+                } catch (e2) {
+                  if (kDebugMode) print('⚠️ Single add failed: $e2');
+                }
+              }
+              if (kDebugMode) {
+                print('✅ Fallback loaded → playlistLen=${_playlist.length}');
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ _loadRemainingQueue failed: $e');
     }
   }
 
@@ -667,16 +723,33 @@ class MyAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> skipToNext() async {
-    if (_isChangingSong) return;
+    // 🔓 User-initiated: force-clear any stuck guard — user intent > auto ops
+    if (_isChangingSong) {
+      if (kDebugMode) print('⚠️ skipToNext: force-clearing stuck _isChangingSong');
+      _endChangingSong();
+      _cancelLoadingWatchdog();
+    }
     final nextIndex = (_player.currentIndex ?? 0) + 1;
+    if (kDebugMode) {
+      print('⏭️ skipToNext: currentIdx=${_player.currentIndex}, '
+          'nextIdx=$nextIndex, queueLen=${queue.value.length}, '
+          'playlistLen=${_playlist.length}');
+    }
     if (nextIndex < queue.value.length) {
       await _safeSkipToIndex(nextIndex);
+    } else if (kDebugMode) {
+      print('⚠️ skipToNext: no next song available');
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (_isChangingSong) return;
+    // 🔓 User-initiated: force-clear any stuck guard
+    if (_isChangingSong) {
+      if (kDebugMode) print('⚠️ skipToPrevious: force-clearing stuck _isChangingSong');
+      _endChangingSong();
+      _cancelLoadingWatchdog();
+    }
     if (_player.position > const Duration(seconds: 3)) {
       await _player.seek(Duration.zero);
     } else {
@@ -689,7 +762,12 @@ class MyAudioHandler extends BaseAudioHandler {
 
   @override
   Future<void> skipToQueueItem(int index) async {
-    if (_isChangingSong) return;
+    // 🔓 User-initiated: force-clear any stuck guard
+    if (_isChangingSong) {
+      if (kDebugMode) print('⚠️ skipToQueueItem: force-clearing stuck _isChangingSong');
+      _endChangingSong();
+      _cancelLoadingWatchdog();
+    }
     if (index >= 0 && index < queue.value.length) {
       await _safeSkipToIndex(index);
     }
@@ -769,13 +847,8 @@ class MyAudioHandler extends BaseAudioHandler {
       title: song.title,
       artist: song.artist,
       artUri: artUri,
-      // Live stream: ตั้ง duration = null เพราะ HLS ไม่รู้ความยาวล่วงหน้า
-      duration: song.isLive ? null : Duration(seconds: song.duration),
-      extras: {
-        'isLocal': song.isLocal,
-        'isLive': song.isLive,
-        'filePath': song.filePath,
-      },
+      duration: Duration(seconds: song.duration),
+      extras: {'isLocal': song.isLocal, 'filePath': song.filePath},
     );
   }
 
