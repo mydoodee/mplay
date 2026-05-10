@@ -214,7 +214,6 @@ class _HomeScreenState extends State<HomeScreen> {
     FocusScope.of(context).unfocus();
     Provider.of<SongProvider>(context, listen: false).clearSuggestions();
   }
-  }
 
   @override
   Widget build(BuildContext context) {

@@ -90,6 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) _barController.forward();
     });
 
+
     // Navigate
     Timer(const Duration(milliseconds: 2800), () {
       if (mounted) {
