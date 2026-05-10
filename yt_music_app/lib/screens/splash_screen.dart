@@ -91,6 +91,7 @@ class _SplashScreenState extends State<SplashScreen>
     });
 
 
+
     // Navigate
     Timer(const Duration(milliseconds: 2800), () {
       if (mounted) {
