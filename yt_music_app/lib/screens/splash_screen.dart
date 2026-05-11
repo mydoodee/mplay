@@ -1,9 +1,15 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:audio_service/audio_service.dart';
+import 'package:provider/provider.dart';
 import 'home_screen.dart';
 import '../widgets/app_logo.dart';
 import '../l10n/app_localizations.dart';
+import '../main.dart' show audioHandler;
+import '../services/audio_handler.dart';
+import '../services/equalizer_provider.dart';
+import '../services/heartbeat_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -90,23 +96,59 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) _barController.forward();
     });
 
+    // Init heavy services in background while animations play
+    _initServicesAndNavigate();
+  }
 
+  Future<void> _initServicesAndNavigate() async {
+    // Run audio init and minimum splash duration concurrently
+    await Future.wait([
+      _initAudioServices(),
+      Future.delayed(const Duration(milliseconds: 2800)),
+    ]);
 
-    // Navigate
-    Timer(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 600),
-            pageBuilder: (_, _, _) => const HomeScreen(),
-            transitionsBuilder: (_, animation, _, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      }
-    });
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (ctx, _, _) {
+          // Wrap HomeScreen with EqualizerProvider if audioHandler is ready
+          if (audioHandler != null) {
+            return ChangeNotifierProvider(
+              create: (_) => EqualizerProvider(audioHandler!),
+              lazy: false,
+              child: const HomeScreen(),
+            );
+          }
+          return const HomeScreen();
+        },
+        transitionsBuilder: (_, animation, _, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+  Future<void> _initAudioServices() async {
+    try {
+      audioHandler = await AudioService.init(
+        builder: () => MyAudioHandler(),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.ytmusic.channel.audio',
+          androidNotificationChannelName: 'YouTube Music Playback',
+          androidStopForegroundOnPause: true,
+          androidNotificationIcon: 'mipmap/launcher_icon',
+        ),
+      );
+      debugPrint('✅ AudioService initialized successfully');
+    } catch (e) {
+      debugPrint('⚠️ AudioService init failed: $e');
+    }
+
+    // HeartbeatService is lightweight — init after audio
+    HeartbeatService().init();
   }
 
   @override

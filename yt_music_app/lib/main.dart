@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:audio_service/audio_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'dart:io';
 import 'services/audio_handler.dart';
 import 'services/song_provider.dart';
-import 'services/equalizer_provider.dart';
-import 'services/heartbeat_service.dart';
 import 'screens/splash_screen.dart';
 
 // Global audio handler (nullable to prevent LateInitializationError)
@@ -17,6 +14,7 @@ MyAudioHandler? audioHandler;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Init sqflite for desktop platforms (fast, local only)
   if (Platform.isWindows || Platform.isLinux) {
     try {
       sqfliteFfiInit();
@@ -26,35 +24,11 @@ Future<void> main() async {
     }
   }
 
-  try {
-    // Initialize audio handler
-    audioHandler = await AudioService.init(
-      builder: () => MyAudioHandler(),
-      config: const AudioServiceConfig(
-        androidNotificationChannelId: 'com.ytmusic.channel.audio',
-        androidNotificationChannelName: 'YouTube Music Playback',
-        androidStopForegroundOnPause: true,
-        androidNotificationIcon: 'mipmap/launcher_icon',
-      ),
-    );
-    debugPrint('✅ AudioService initialized successfully');
-  } catch (e) {
-    debugPrint('⚠️ AudioService init failed: $e');
-    // App continues without audio service
-  }
-
-  // Initialize HeartbeatService
-  HeartbeatService().init();
-
+  // Run app immediately — SplashScreen handles heavy async init
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => SongProvider()),
-        if (audioHandler != null)
-          ChangeNotifierProvider(
-            create: (_) => EqualizerProvider(audioHandler!),
-            lazy: false, // บังคับให้สร้างและโหลดการตั้งค่าทันทีตอนเริ่มแอป
-          ),
       ],
       child: const MyApp(),
     ),
