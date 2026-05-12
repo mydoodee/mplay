@@ -507,10 +507,11 @@ class SongProvider with ChangeNotifier {
 
     try {
       // 1. ดึง direct audio URL จาก Server
-      final audioUrl = await _apiService.getAudioUrl(song.id);
-      if (audioUrl == null || audioUrl.isEmpty) {
+      final audioResult = await _apiService.getAudioUrl(song.id);
+      if (audioResult == null) {
         throw Exception('ไม่สามารถดึง URL เพลงได้');
       }
+      final audioUrl = audioResult['url'] as String;
 
       // 2. เตรียม path สำหรับบันทึกไฟล์ → Download/Mplay
       Directory downloadDir;
