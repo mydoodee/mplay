@@ -601,10 +601,7 @@ class MyAudioHandler extends BaseAudioHandler {
   Future<void> setQueue(List<Song> songs, {int initialIndex = 0}) async {
     if (songs.isEmpty) return;
 
-    // 🔴 ตั้ง guard ทันที ก่อน async ใดๆ ทั้งหมด
-    // ป้องกัน idle watchdog ยิงระหว่าง stop() → clear() → add()
     _startChangingSongGuard();
-
     songs = List<Song>.from(songs);
 
     final items = songs.map(_songToMediaItem).toList();
@@ -614,140 +611,63 @@ class MyAudioHandler extends BaseAudioHandler {
       mediaItem.add(items[initialIndex]);
     }
 
+    // 🚀 Pre-cache เพลงถัดไป 3 เพลงบน server (non-blocking)
     final Song firstSong = songs[initialIndex];
-    final MediaItem firstItem = items[initialIndex];
-
     if (!firstSong.isLocal) {
       ApiService().getAudioUrl(firstSong.id).catchError((_) => null);
     }
 
-    final AudioSource firstSource =
-        firstSong.isLocal && firstSong.filePath != null
-        ? AudioSource.file(firstSong.filePath!, tag: firstItem)
-        : AudioSource.uri(
-            Uri.parse(ApiConfig.streamUrl(firstSong.id)),
-            tag: firstItem,
-            headers: {'User-Agent': 'Mozilla/5.0'},
-          );
+    // 🎯 สร้าง AudioSource ทุกเพลงทันที (lightweight — ไม่ได้โหลด audio ทันที)
+    // just_audio จะโหลด audio จริงเมื่อถึงเพลงนั้น
+    final allSources = songs.asMap().entries.map((entry) {
+      final i = entry.key;
+      final s = entry.value;
+      return s.isLocal && s.filePath != null
+          ? AudioSource.file(s.filePath!, tag: items[i])
+          : AudioSource.uri(
+              Uri.parse(ApiConfig.streamUrl(s.id)),
+              tag: items[i],
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                if (s.isLive || s.duration == 0) 'Accept-Encoding': 'identity',
+              },
+            );
+    }).toList();
 
     try {
       await _player.stop();
       await _playlist.clear();
-      await _playlist.add(firstSource);
-      await _player.seek(Duration.zero, index: 0);
+      // โหลดทั้งหมดพร้อมกันครั้งเดียว — ป้องกัน race condition
+      await _playlist.addAll(allSources);
+      await _player.seek(Duration.zero, index: initialIndex);
       await _player.play();
+      _onPlaybackStartedSuccessfully(firstSong.id);
+      if (kDebugMode) {
+        print('✅ setQueue: loaded ${allSources.length} sources, '
+            'playing at index=$initialIndex');
+      }
     } catch (e) {
-      if (kDebugMode) print('❌ Error starting first song: $e');
+      if (kDebugMode) print('❌ Error in setQueue: $e');
       _handlePlaybackError();
     } finally {
       _endChangingSong();
     }
 
+    // Pre-cache 3 เพลงถัดไปบน server (background, ไม่ block)
     if (songs.length > 1) {
-      unawaited(_loadRemainingQueue(songs, items, initialIndex));
-    }
-  }
-
-  /// โหลดเพลงที่เหลือใน background หลังจากเพลงแรกเริ่มเล่นแล้ว
-  Future<void> _loadRemainingQueue(
-    List<Song> songs,
-    List<MediaItem> items,
-    int initialIndex,
-  ) async {
-    try {
-      // Pre-cache แค่ 3 เพลงถัดไป (ลดจาก 10 เพื่อประหยัด Network/CPU)
-      final List<String> nextBatchIds = [];
-      for (
-        int i = initialIndex + 1;
-        i < songs.length && i < initialIndex + 4;
-        i++
-      ) {
-        if (!songs[i].isLocal) nextBatchIds.add(songs[i].id);
-      }
-
-      if (nextBatchIds.isNotEmpty) {
-        try {
-          await ApiService().batchResolveUrls(nextBatchIds);
-        } catch (e) {
-          if (kDebugMode) print('❌ Batch resolve failed: $e');
+      Future.microtask(() async {
+        final nextIds = <String>[];
+        for (int i = initialIndex + 1;
+            i < songs.length && i < initialIndex + 4;
+            i++) {
+          if (!songs[i].isLocal) nextIds.add(songs[i].id);
         }
-      }
-
-      final otherSources = <AudioSource>[];
-
-      // เพลงก่อน initialIndex (ใช้ streamUrl ปกติเพราะโอกาสเล่นน้อยกว่า)
-      for (int i = 0; i < initialIndex; i++) {
-        final s = songs[i];
-        otherSources.add(
-          s.isLocal && s.filePath != null
-              ? AudioSource.file(s.filePath!, tag: items[i])
-              : AudioSource.uri(
-                  Uri.parse(ApiConfig.streamUrl(s.id)),
-                  tag: items[i],
-                  headers: {'User-Agent': 'Mozilla/5.0'},
-                ),
-        );
-      }
-
-      // เพลงหลัง initialIndex (ใช้ streamUrl ปกติ แต่ Server จะมี Cache แล้วเพราะเราสั่ง batchResolve)
-      for (int i = initialIndex + 1; i < songs.length; i++) {
-        final s = songs[i];
-        otherSources.add(
-          s.isLocal && s.filePath != null
-              ? AudioSource.file(s.filePath!, tag: items[i])
-              : AudioSource.uri(
-                  Uri.parse(ApiConfig.streamUrl(s.id)),
-                  tag: items[i],
-                  headers: {'User-Agent': 'Mozilla/5.0'},
-                ),
-        );
-      }
-
-      // insert เพลงก่อน initialIndex ที่ตำแหน่ง 0
-      if (initialIndex > 0) {
-        await _playlist.insertAll(0, otherSources.sublist(0, initialIndex));
-        // 🔧 หลัง insert: seek ไป initialIndex โดยคงตำแหน่งเวลาเดิมไว้
-        // ไม่ reset เป็น Duration.zero เพื่อไม่ให้กระโดดกลับต้นเพลง
-        final currentPosition = _player.position;
-        final currentIdx = _player.currentIndex ?? 0;
-        if (currentIdx < initialIndex) {
-          await _player.seek(currentPosition, index: initialIndex);
+        if (nextIds.isNotEmpty) {
+          ApiService().batchResolveUrls(nextIds).catchError(
+            (_) => <String, String?>{},
+          );
         }
-      }
-
-      // add เพลงหลัง initialIndex
-      if (initialIndex + 1 < songs.length) {
-        final afterStartOffset = initialIndex > 0 ? initialIndex : 0;
-        if (afterStartOffset < otherSources.length) {
-          final afterSources = otherSources.sublist(afterStartOffset);
-          if (afterSources.isNotEmpty) {
-            try {
-              await _playlist.addAll(afterSources);
-              if (kDebugMode) {
-                print(
-                  '✅ Loaded ${afterSources.length} remaining sources → '
-                  'playlistLen=${_playlist.length}',
-                );
-              }
-            } catch (e) {
-              // 🔧 addAll ล้มเหลว → ลองเพิ่มทีละเพลง
-              if (kDebugMode) print('⚠️ addAll failed: $e — adding one by one');
-              for (final source in afterSources) {
-                try {
-                  await _playlist.add(source);
-                } catch (e2) {
-                  if (kDebugMode) print('⚠️ Single add failed: $e2');
-                }
-              }
-              if (kDebugMode) {
-                print('✅ Fallback loaded → playlistLen=${_playlist.length}');
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      if (kDebugMode) print('❌ _loadRemainingQueue failed: $e');
+      });
     }
   }
 

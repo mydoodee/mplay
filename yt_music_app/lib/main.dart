@@ -6,10 +6,13 @@ import 'l10n/app_localizations.dart';
 import 'dart:io';
 import 'services/audio_handler.dart';
 import 'services/song_provider.dart';
+import 'services/equalizer_provider.dart';
 import 'screens/splash_screen.dart';
 
 // Global audio handler (nullable to prevent LateInitializationError)
 MyAudioHandler? audioHandler;
+// Global EQ provider — set after audioHandler is ready in SplashScreen
+EqualizerProvider? equalizerProvider;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

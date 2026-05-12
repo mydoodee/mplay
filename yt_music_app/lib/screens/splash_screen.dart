@@ -114,12 +114,12 @@ class _SplashScreenState extends State<SplashScreen>
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 600),
         pageBuilder: (ctx, _, _) {
-          // Wrap HomeScreen with EqualizerProvider if audioHandler is ready
+          // ห่อ HomeScreen ด้วย EqualizerProvider ผ่าน Navigator ระดับล่าง
+          // เพื่อให้ทุก route ที่ push จาก HomeScreen เข้าถึง EQ ได้
           if (audioHandler != null) {
-            return ChangeNotifierProvider(
+            return ChangeNotifierProvider<EqualizerProvider>(
               create: (_) => EqualizerProvider(audioHandler!),
-              lazy: false,
-              child: const HomeScreen(),
+              child: const _HomeWrapper(),
             );
           }
           return const HomeScreen();
@@ -130,6 +130,7 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
+
 
   Future<void> _initAudioServices() async {
     try {
@@ -346,6 +347,24 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Wrapper ที่ใช้ nested Navigator
+/// เพื่อให้ EqualizerProvider ครอบทุก route ที่ push จาก HomeScreen ได้
+class _HomeWrapper extends StatelessWidget {
+  const _HomeWrapper();
+
+  @override
+  Widget build(BuildContext context) {
+    return Navigator(
+      onGenerateRoute: (settings) {
+        return MaterialPageRoute(
+          builder: (_) => const HomeScreen(),
+          settings: settings,
+        );
+      },
     );
   }
 }
