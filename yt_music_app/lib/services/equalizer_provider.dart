@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -29,6 +30,11 @@ class EqualizerProvider extends ChangeNotifier {
   double get bassBoosterLevel => _bassBoosterLevel;
   List<double> get bandValues => _bandValues;
 
+  // ── Mutex & Debounce Variables for Audio Thread Protection ──
+  Timer? _applyTimer;
+  bool _isApplying = false;
+  bool _pendingApply = false;
+
   EqualizerProvider(this.audioHandler) {
     _loadSettings();
   }
@@ -41,16 +47,17 @@ class EqualizerProvider extends ChangeNotifier {
     // Migrate old Thai presets if found
     if (_selectedPreset == 'ปกติ') {
       _selectedPreset = 'normal';
-    } else if (_selectedPreset == 'ป๊อป')
+    } else if (_selectedPreset == 'ป๊อป') {
       _selectedPreset = 'pop';
-    else if (_selectedPreset == 'ร็อก')
+    } else if (_selectedPreset == 'ร็อก') {
       _selectedPreset = 'rock';
-    else if (_selectedPreset == 'แจ๊ส')
+    } else if (_selectedPreset == 'แจ๊ส') {
       _selectedPreset = 'jazz';
-    else if (_selectedPreset == 'คลาสสิก')
+    } else if (_selectedPreset == 'คลาสสิก') {
       _selectedPreset = 'classic';
-    else if (_selectedPreset == 'กำหนดเอง')
+    } else if (_selectedPreset == 'กำหนดเอง') {
       _selectedPreset = 'custom';
+    }
 
     _bassBoosterLevel = prefs.getDouble('eq_bass_boost') ?? 0.0;
 
@@ -78,20 +85,30 @@ class EqualizerProvider extends ChangeNotifier {
     _applyToAudioPlayer();
   }
 
-  Future<void> saveSettings() async {
+  Future<void> saveSettings({bool debounce = false}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('eq_enabled', _isEqualizerEnabled);
     await prefs.setString('eq_preset', _selectedPreset);
     await prefs.setDouble('eq_bass_boost', _bassBoosterLevel);
     await prefs.setString('eq_bands', jsonEncode(_bandValues));
     await prefs.setString('eq_custom_bands', jsonEncode(_customBandValues));
-    _applyToAudioPlayer();
+    
+    if (debounce) {
+      // Debounce continuous drag updates to prevent audio popping and flooding
+      _applyTimer?.cancel();
+      _applyTimer = Timer(const Duration(milliseconds: 100), () {
+        _applyToAudioPlayer();
+      });
+    } else {
+      _applyTimer?.cancel();
+      _applyToAudioPlayer();
+    }
   }
 
   void setEnabled(bool enabled) {
     _isEqualizerEnabled = enabled;
     notifyListeners();
-    saveSettings();
+    saveSettings(debounce: false);
   }
 
   void setPreset(String preset) {
@@ -99,18 +116,22 @@ class EqualizerProvider extends ChangeNotifier {
     if (_selectedPreset == 'normal') {
       _bandValues = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     } else if (preset == 'pop') {
-      _bandValues = [-2.0, -1.0, 2.0, 3.0, 4.0, 2.0, -2.0];
+      // V-shaped curve (boosted low & high, dipped mid-range)
+      _bandValues = [4.0, 2.5, -2.0, -3.5, -2.0, 3.0, 5.0];
     } else if (preset == 'rock') {
-      _bandValues = [5.0, 4.0, 2.0, -1.0, 2.0, 3.0, 5.0];
+      // Bold aggressive rock curve
+      _bandValues = [6.0, 4.5, -1.0, 1.5, 3.5, 5.0, 6.5];
     } else if (preset == 'jazz') {
-      _bandValues = [3.0, 2.0, 1.0, -1.0, 1.0, 2.0, 4.0];
+      // Warm low end, smooth mids, gentle highs
+      _bandValues = [5.0, 3.5, 2.0, -1.5, -1.0, 2.5, 4.0];
     } else if (preset == 'classic') {
-      _bandValues = [4.0, 3.0, 2.0, -2.0, -1.0, 3.0, 4.0];
+      // Orchestral layout
+      _bandValues = [5.0, 3.5, 1.5, -1.0, 2.0, 3.5, 4.5];
     } else if (preset == 'custom') {
       _bandValues = List.from(_customBandValues);
     }
     notifyListeners();
-    saveSettings();
+    saveSettings(debounce: false); // Presets are clicked, apply instantly
   }
 
   void setBandValue(int index, double value) {
@@ -118,18 +139,29 @@ class EqualizerProvider extends ChangeNotifier {
     _customBandValues[index] = value;
     _selectedPreset = 'custom';
     notifyListeners();
-    saveSettings();
+    saveSettings(debounce: true); // Sliders are dragged, use debounce
   }
 
   void setBassBoosterLevel(double value) {
     _bassBoosterLevel = value;
     notifyListeners();
-    saveSettings();
+    saveSettings(debounce: true); // Bass slider is dragged, use debounce
   }
 
   Future<void> _applyToAudioPlayer() async {
+    // ── Mutex Lock Gatekeeper ──
+    if (_isApplying) {
+      _pendingApply = true;
+      return;
+    }
+    _isApplying = true;
+    _pendingApply = false;
+
     // Equalizer and LoudnessEnhancer are primarily Android features in just_audio
-    if (!Platform.isAndroid) return;
+    if (!Platform.isAndroid) {
+      _isApplying = false;
+      return;
+    }
 
     final eq = audioHandler.equalizer;
     final loudness = audioHandler.loudnessEnhancer;
@@ -153,13 +185,18 @@ class EqualizerProvider extends ChangeNotifier {
         // Apply Equalizer
         try {
           final parameters = await eq.parameters;
-          final bands = parameters.bands;
-          for (int i = 0; i < min(bands.length, _bandValues.length); i++) {
-            await bands[i].setGain(_bandValues[i] / 15.0);
+          final bandsList = parameters.bands;
+          
+          // Apply gain to each band. Wrap in independent try-catches to prevent 
+          // a single platform delay or channel issue from breaking the entire loop.
+          for (int i = 0; i < min(bandsList.length, _bandValues.length); i++) {
+            try {
+              await bandsList[i].setGain(_bandValues[i]);
+            } catch (bandError) {
+              debugPrint("Error setting gain for band $i: $bandError");
+            }
           }
         } catch (e) {
-          // This catches the "Map<dynamic, dynamic> is not a subtype of Map<String, dynamic>"
-          // or other platform-specific implementation errors
           debugPrint("Equalizer parameters error: $e");
         }
       } else {
@@ -170,6 +207,18 @@ class EqualizerProvider extends ChangeNotifier {
       if (kDebugMode) {
         print("Equalizer not supported or failed: $e");
       }
+    } finally {
+      _isApplying = false;
+      // If another apply request was queued while processing, trigger it now
+      if (_pendingApply) {
+        _applyToAudioPlayer();
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _applyTimer?.cancel();
+    super.dispose();
   }
 }
