@@ -1,6 +1,6 @@
 {
-  "latest_version": "1.0.1.55",
-  "build_number": 55,
-  "download_url": "https://music.growkub.com/mplay-1.0.1.55.apk",
-  "release_notes": "• ปรับ EQ ระบบเสียงให้ดีขึ้น "  
+  "latest_version": "1.0.1.58",
+  "build_number": 58,
+  "download_url": "https://music.growkub.com/mplay-1.0.1.58.apk",
+  "release_notes": "• ปรับ EQ จำกัดสเกลไม่เกิน ±3 dB "  
 }
