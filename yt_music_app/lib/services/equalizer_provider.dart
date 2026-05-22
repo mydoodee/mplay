@@ -34,13 +34,31 @@ class EqualizerProvider extends ChangeNotifier {
   double get bassBoosterLevel => _bassBoosterLevel;
   List<double> get bandValues => _bandValues;
 
-  // ── Mutex ──
+  // ── Debounce Engine ──
+  // Instead of ramping continuously (which causes constant MethodChannel traffic and continuous zipper noise on Android),
+  // we wait until the user stops dragging for a short duration before applying the hardware changes.
+  
+  static const int _debounceIntervalMs = 150; 
+
+  List<double> _targetHwGains = [];
+  List<double> _appliedHwGains = [];
+  double _targetBassDb = 0.0;
+  double _appliedBassDb = double.nan;
+
+  Timer? _debounceTimer;
   bool _isApplying = false;
-  bool _pendingApply = false;
+
+  // ── Hardware cache ──
+  bool _effectsInitialized = false;
+  AndroidEqualizerParameters? _cachedParameters;
 
   EqualizerProvider(this.audioHandler) {
     _loadSettings();
   }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Settings persistence
+  // ─────────────────────────────────────────────────────────────────────────
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -79,8 +97,16 @@ class EqualizerProvider extends ChangeNotifier {
     }
 
     notifyListeners();
-    // On load: apply directly
-    _applyToAudioPlayer();
+    _scheduleApply(immediate: true);
+  }
+
+  Future<void> _saveSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('eq_enabled', _isEqualizerEnabled);
+    await prefs.setString('eq_preset', _selectedPreset);
+    await prefs.setDouble('eq_bass_boost', _bassBoosterLevel);
+    await prefs.setString('eq_bands', jsonEncode(_bandValues));
+    await prefs.setString('eq_custom_bands', jsonEncode(_customBandValues));
   }
 
   List<double> _getPresetValues(String preset) {
@@ -94,27 +120,15 @@ class EqualizerProvider extends ChangeNotifier {
     }
   }
 
-  List<double> _currentAppliedHwGains = [0.0, 0.0, 0.0, 0.0, 0.0];
-  double _currentAppliedBass = 0.0;
-
-  Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('eq_enabled', _isEqualizerEnabled);
-    await prefs.setString('eq_preset', _selectedPreset);
-    await prefs.setDouble('eq_bass_boost', _bassBoosterLevel);
-    await prefs.setString('eq_bands', jsonEncode(_bandValues));
-    await prefs.setString('eq_custom_bands', jsonEncode(_customBandValues));
-  }
-
-  Future<void> _saveAndApply() async {
-    await _saveSettings();
-    _applyToAudioPlayer();
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Public setters (called by UI)
+  // ─────────────────────────────────────────────────────────────────────────
 
   void setEnabled(bool enabled) {
     _isEqualizerEnabled = enabled;
     notifyListeners();
-    _saveAndApply();
+    _saveSettings();
+    _scheduleApply();
   }
 
   void setPreset(String preset) {
@@ -123,38 +137,150 @@ class EqualizerProvider extends ChangeNotifier {
         ? List.from(_customBandValues)
         : _getPresetValues(preset);
     notifyListeners();
-    _saveAndApply();
+    _saveSettings();
+    _scheduleApply();
   }
 
+  /// Called on every slider drag tick — update target only, no hardware call here.
   void setBandValueVisual(int index, double value) {
     _bandValues[index] = value;
     _customBandValues[index] = value;
     _selectedPreset = 'custom';
     notifyListeners();
+    _scheduleApply(); // debounce
   }
 
+  /// Called when user lifts finger — save to prefs.
   void commitBandValue(int index, double value) {
     _bandValues[index] = value;
     _customBandValues[index] = value;
     _selectedPreset = 'custom';
     notifyListeners();
-    _saveAndApply();
+    _saveSettings();
+    _scheduleApply();
   }
 
+  /// Called on every bass slider drag tick — update target only.
   void setBassBoosterVisual(double value) {
     _bassBoosterLevel = value;
     notifyListeners();
+    _scheduleApply(); // debounce
   }
 
+  /// Called when user lifts finger — save to prefs.
   void commitBassBooster(double value) {
     _bassBoosterLevel = value;
     notifyListeners();
-    _saveAndApply();
+    _saveSettings();
+    _scheduleApply();
   }
 
-  // ── Hardware cache ──
-  bool _effectsInitialized = false;
-  AndroidEqualizerParameters? _cachedParameters;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Debounce Engine
+  // ─────────────────────────────────────────────────────────────────────────
+
+  void _scheduleApply({bool immediate = false}) {
+    if (!Platform.isAndroid) return;
+    _debounceTimer?.cancel();
+    
+    if (immediate) {
+      _applyNow();
+    } else {
+      _debounceTimer = Timer(
+        const Duration(milliseconds: _debounceIntervalMs),
+        () => _applyNow(),
+      );
+    }
+  }
+
+  /// Recompute the target hardware gains from the current UI band values.
+  void _updateTargets() {
+    final targetBands = _isEqualizerEnabled
+        ? _bandValues
+        : List.filled(_bandValues.length, 0.0);
+
+    final hwGains = _antiClip(_mapToHardwareBands(targetBands));
+    _targetHwGains = hwGains.map(_safeGain).toList();
+
+    final targetBass = _isEqualizerEnabled ? _bassBoosterLevel : 0.0;
+    _targetBassDb = targetBass / 100.0 * 5.0; // Reduced max from 10.0 to 5.0 dB to prevent clipping/distortion
+  }
+
+  Future<void> _applyNow() async {
+    if (_isApplying) return; // Prevent concurrent calls
+    _isApplying = true;
+
+    try {
+      await _ensureEffectsReady();
+      if (_cachedParameters == null) return;
+
+      _updateTargets();
+
+      final futures = <Future>[];
+
+      // ── EQ bands ──
+      for (int i = 0; i < min(_cachedParameters!.bands.length, _targetHwGains.length); i++) {
+        if (i >= _appliedHwGains.length) {
+          _appliedHwGains.add(_targetHwGains[i]);
+          futures.add(_cachedParameters!.bands[i].setGain(_targetHwGains[i]).catchError((_) {}));
+          continue;
+        }
+
+        final diff = _targetHwGains[i] - _appliedHwGains[i];
+        if (diff.abs() > 0.02) {
+          _appliedHwGains[i] = _targetHwGains[i];
+          futures.add(_cachedParameters!.bands[i].setGain(_targetHwGains[i]).catchError((_) {}));
+        }
+      }
+
+      // ── Bass booster ──
+      if (_appliedBassDb.isNaN || (_targetBassDb - _appliedBassDb).abs() > 0.02) {
+        _appliedBassDb = _targetBassDb;
+        futures.add(audioHandler.loudnessEnhancer.setTargetGain(_targetBassDb).catchError((_) {}));
+      }
+
+      if (futures.isNotEmpty) {
+        await Future.wait(futures);
+      }
+
+    } catch (e) {
+      if (kDebugMode) print('EQ apply failed: $e');
+    } finally {
+      _isApplying = false;
+    }
+  }
+
+  /// Initialize AndroidEqualizer / AndroidLoudnessEnhancer and cache parameters.
+  Future<void> _ensureEffectsReady() async {
+    final eq = audioHandler.equalizer;
+    final loudness = audioHandler.loudnessEnhancer;
+
+    if (!_effectsInitialized) {
+      try {
+        await eq.setEnabled(true);
+        await loudness.setEnabled(true);
+        _effectsInitialized = true;
+      } catch (_) {}
+    }
+
+    if (!_hwRangeQueried) {
+      try {
+        _cachedParameters = await eq.parameters;
+        _hwMinGain = _cachedParameters!.minDecibels;
+        _hwMaxGain = _cachedParameters!.maxDecibels;
+        _hwBandCount = _cachedParameters!.bands.length;
+        _hwRangeQueried = true;
+        _appliedHwGains = []; // will be snapped on first tick
+        debugPrint('🎛️ EQ HW: bands=$_hwBandCount, range=[$_hwMinGain, $_hwMaxGain] dB');
+      } catch (e) {
+        debugPrint('⚠️ EQ range query failed: $e');
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // DSP helpers
+  // ─────────────────────────────────────────────────────────────────────────
 
   List<double> _mapToHardwareBands(List<double> uiBands) {
     if (_hwBandCount >= 7) return uiBands.take(_hwBandCount).toList();
@@ -192,91 +318,11 @@ class EqualizerProvider extends ChangeNotifier {
     return gains.map((g) => g * scale).toList();
   }
 
-  Future<void> _applyToAudioPlayer() async {
-    if (_isApplying) {
-      _pendingApply = true;
-      return;
-    }
-    _isApplying = true;
-    _pendingApply = false;
-
-    if (!Platform.isAndroid) {
-      _isApplying = false;
-      return;
-    }
-
-    final eq = audioHandler.equalizer;
-    final loudness = audioHandler.loudnessEnhancer;
-
-    try {
-      if (!_effectsInitialized) {
-        try {
-          await eq.setEnabled(true);
-          await loudness.setEnabled(true);
-          _effectsInitialized = true;
-        } catch (_) {}
-      }
-
-      if (!_hwRangeQueried) {
-        try {
-          _cachedParameters = await eq.parameters;
-          _hwMinGain = _cachedParameters!.minDecibels;
-          _hwMaxGain = _cachedParameters!.maxDecibels;
-          _hwBandCount = _cachedParameters!.bands.length;
-          _hwRangeQueried = true;
-          // Sync size
-          _currentAppliedHwGains = List.filled(_hwBandCount, -999.0);
-          debugPrint('🎛️ EQ HW: bands=$_hwBandCount, range=[$_hwMinGain, $_hwMaxGain] dB');
-        } catch (e) {
-          debugPrint('⚠️ EQ range query failed: $e');
-        }
-      }
-
-      final double targetBass = _isEqualizerEnabled ? _bassBoosterLevel : 0.0;
-      final List<double> targetBands = _isEqualizerEnabled
-          ? _bandValues
-          : List.filled(_bandValues.length, 0.0);
-
-      final hwGains = _antiClip(_mapToHardwareBands(targetBands));
-      final targetHwGains = hwGains.map(_safeGain).toList();
-      final targetBassDb = targetBass / 100.0 * 10.0;
-
-      final parameters = _cachedParameters ?? await eq.parameters;
-      _cachedParameters = parameters;
-
-      // ── Apply ONLY changed bands to prevent MethodChannel flooding & audio zipper noise ──
-      final futures = <Future>[];
-      for (int i = 0; i < min(parameters.bands.length, targetHwGains.length); i++) {
-        if (i >= _currentAppliedHwGains.length) {
-          _currentAppliedHwGains.add(-999.0);
-        }
-        if ((_currentAppliedHwGains[i] - targetHwGains[i]).abs() > 0.05) {
-          _currentAppliedHwGains[i] = targetHwGains[i];
-          futures.add(parameters.bands[i].setGain(targetHwGains[i]).catchError((_) {}));
-        }
-      }
-      
-      if ((_currentAppliedBass - targetBassDb).abs() > 0.05) {
-        _currentAppliedBass = targetBassDb;
-        futures.add(loudness.setTargetGain(targetBassDb).catchError((_) {}));
-      }
-
-      if (futures.isNotEmpty) {
-        await Future.wait(futures);
-      }
-
-    } catch (e) {
-      if (kDebugMode) print('EQ apply failed: $e');
-    } finally {
-      _isApplying = false;
-      if (_pendingApply) {
-        Future.delayed(const Duration(milliseconds: 50), _applyToAudioPlayer);
-      }
-    }
-  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     super.dispose();
   }
 }
