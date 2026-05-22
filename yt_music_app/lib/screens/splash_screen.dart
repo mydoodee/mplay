@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:provider/provider.dart';
@@ -353,18 +354,42 @@ class _SplashScreenState extends State<SplashScreen>
 
 /// Wrapper ที่ใช้ nested Navigator
 /// เพื่อให้ EqualizerProvider ครอบทุก route ที่ push จาก HomeScreen ได้
-class _HomeWrapper extends StatelessWidget {
+/// ใช้ PopScope เพื่อดัก Android back button → pop nested navigator ก่อน
+class _HomeWrapper extends StatefulWidget {
   const _HomeWrapper();
 
   @override
+  State<_HomeWrapper> createState() => _HomeWrapperState();
+}
+
+class _HomeWrapperState extends State<_HomeWrapper> {
+  final GlobalKey<NavigatorState> _nestedNavKey = GlobalKey<NavigatorState>();
+
+  @override
   Widget build(BuildContext context) {
-    return Navigator(
-      onGenerateRoute: (settings) {
-        return MaterialPageRoute(
-          builder: (_) => const HomeScreen(),
-          settings: settings,
-        );
+    return PopScope(
+      canPop: false, // เราจัดการ back button เอง
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return; // ถ้า pop สำเร็จแล้วไม่ต้องทำอะไร
+
+        final nestedNav = _nestedNavKey.currentState;
+        if (nestedNav != null && nestedNav.canPop()) {
+          // ยังมี route ใน nested navigator → ถอยกลับ
+          nestedNav.pop();
+        } else {
+          // อยู่หน้า Home แล้ว → minimize app (ไม่ exit)
+          SystemNavigator.pop();
+        }
       },
+      child: Navigator(
+        key: _nestedNavKey,
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            builder: (_) => const HomeScreen(),
+            settings: settings,
+          );
+        },
+      ),
     );
   }
 }

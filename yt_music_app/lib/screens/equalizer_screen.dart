@@ -433,8 +433,8 @@ class EqualizerScreen extends StatelessWidget {
       l10n.eqBandBrilliance,
     ];
 
-    final value = eqProvider.bandValues[index].clamp(-12.0, 12.0);
-    final double percent = (value + 12.0) / 24.0;
+    final value = eqProvider.bandValues[index].clamp(-3.0, 3.0);
+    final double percent = (value + 3.0) / 6.0;
 
     return Expanded(
       child: Column(
@@ -451,7 +451,7 @@ class EqualizerScreen extends StatelessWidget {
           ),
           // ── dB value indicator ──
           Text(
-            '${value > 0 ? "+" : ""}${value.toStringAsFixed(0)}',
+            '${value > 0 ? "+" : ""}${value.toStringAsFixed(1)}',
             style: TextStyle(
               color: value == 0
                   ? Colors.white38
@@ -576,8 +576,8 @@ class EqualizerScreen extends StatelessWidget {
                     ),
                     child: Slider(
                       value: value,
-                      min: -12,
-                      max: 12,
+                      min: -3,
+                      max: 3,
                       onChanged: (val) => eqProvider.setBandValueVisual(index, val),
                       onChangeEnd: (val) => eqProvider.commitBandValue(index, val),
                     ),
