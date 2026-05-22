@@ -393,7 +393,8 @@ class EqualizerScreen extends StatelessWidget {
                                             value: eqProvider.bassBoosterLevel,
                                             min: 0,
                                             max: 100,
-                                            onChanged: eqProvider.setBassBoosterLevel,
+                                            onChanged: eqProvider.setBassBoosterVisual,
+                                            onChangeEnd: eqProvider.commitBassBooster,
                                           ),
                                         ],
                                       ),
@@ -432,8 +433,8 @@ class EqualizerScreen extends StatelessWidget {
       l10n.eqBandBrilliance,
     ];
 
-    final value = eqProvider.bandValues[index].clamp(-15.0, 15.0);
-    final double percent = (value + 15.0) / 30.0;
+    final value = eqProvider.bandValues[index].clamp(-12.0, 12.0);
+    final double percent = (value + 12.0) / 24.0;
 
     return Expanded(
       child: Column(
@@ -448,7 +449,20 @@ class EqualizerScreen extends StatelessWidget {
               letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 12),
+          // ── dB value indicator ──
+          Text(
+            '${value > 0 ? "+" : ""}${value.toStringAsFixed(0)}',
+            style: TextStyle(
+              color: value == 0
+                  ? Colors.white38
+                  : value > 0
+                      ? const Color(0xFFFFD700)
+                      : const Color(0xFF8888FF),
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
 
           // ── Slider Area with Custom Fire Track ──
           Expanded(
@@ -479,29 +493,54 @@ class EqualizerScreen extends StatelessWidget {
                 Align(
                   alignment: Alignment.bottomCenter,
                   child: FractionallySizedBox(
-                    heightFactor: percent.clamp(0.05, 1.0), // ensure a tiny flame is always showing
+                    heightFactor: percent.clamp(0.02, 1.0),
                     child: Container(
                       width: 14,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF9E0B0F), // Deep hot red at the bottom
-                            Color(0xFFED1C24), // Vibrant red
-                            Color(0xFFF15A24), // Hot orange
-                            Color(0xFFFF9500), // Lava yellow
-                            Color(0xFFFFD700), // White-hot gold at the top
-                          ],
+                        gradient: LinearGradient(
+                          colors: value >= 0
+                              ? const [
+                                  Color(0xFF9E0B0F),
+                                  Color(0xFFED1C24),
+                                  Color(0xFFF15A24),
+                                  Color(0xFFFF9500),
+                                  Color(0xFFFFD700),
+                                ]
+                              : const [
+                                  Color(0xFF1A1A3E),
+                                  Color(0xFF3333AA),
+                                  Color(0xFF5555CC),
+                                ],
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFF15A24).withOpacity(0.4),
-                            blurRadius: 10,
+                            color: value >= 0
+                                ? const Color(0xFFF15A24).withOpacity(0.3)
+                                : const Color(0xFF5555CC).withOpacity(0.3),
+                            blurRadius: 8,
                             spreadRadius: 1,
                           ),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 2.5 Center line marker (0 dB reference)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 18,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.25),
+                        borderRadius: BorderRadius.circular(1),
                       ),
                     ),
                   ),
@@ -537,9 +576,10 @@ class EqualizerScreen extends StatelessWidget {
                     ),
                     child: Slider(
                       value: value,
-                      min: -15,
-                      max: 15,
-                      onChanged: (val) => eqProvider.setBandValue(index, val),
+                      min: -12,
+                      max: 12,
+                      onChanged: (val) => eqProvider.setBandValueVisual(index, val),
+                      onChangeEnd: (val) => eqProvider.commitBandValue(index, val),
                     ),
                   ),
                 ),
