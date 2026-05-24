@@ -79,7 +79,7 @@ class EqualizerProvider extends ChangeNotifier {
       final List<dynamic> decoded = jsonDecode(savedBands);
       final loaded = decoded.map((e) => (e as num).toDouble()).toList();
       if (loaded.length == 7) {
-        _bandValues = loaded.map((v) => v.clamp(-3.0, 3.0)).toList();
+        _bandValues = loaded.map((v) => v.clamp(-10.0, 10.0)).toList();
       }
     }
 
@@ -88,7 +88,7 @@ class EqualizerProvider extends ChangeNotifier {
       final List<dynamic> decodedCustom = jsonDecode(savedCustom);
       final loadedCustom = decodedCustom.map((e) => (e as num).toDouble()).toList();
       if (loadedCustom.length == 7) {
-        _customBandValues = loadedCustom.map((v) => v.clamp(-3.0, 3.0)).toList();
+        _customBandValues = loadedCustom.map((v) => v.clamp(-10.0, 10.0)).toList();
       }
     }
 
@@ -111,10 +111,10 @@ class EqualizerProvider extends ChangeNotifier {
 
   List<double> _getPresetValues(String preset) {
     switch (preset) {
-      case 'pop':     return [1.25, 0.75, -0.5, -0.75, -0.25, 1.0,  1.5];
-      case 'rock':    return [2.0,  1.5,  -0.25, 0.25,  1.0,  1.75, 2.0];
-      case 'jazz':    return [1.75, 1.25,  0.5, -0.25, -0.25, 0.75, 1.25];
-      case 'classic': return [1.5,  1.0,   0.25, -0.25, 0.5,  1.0,  1.5];
+      case 'pop':     return [-1.5, 1.5, 3.0, 4.0, 2.0, -1.0, -1.5];
+      case 'rock':    return [4.0, 3.0, -2.0, -4.0, 1.5, 4.0, 4.5];
+      case 'jazz':    return [3.0, 2.0, 1.0, 1.5, -1.0, 1.0, 3.0];
+      case 'classic': return [4.0, 3.0, 2.0, 2.0, -1.0, 2.0, 3.5];
       case 'normal':
       default:        return [0.0,  0.0,   0.0,  0.0,   0.0,  0.0,  0.0];
     }
@@ -309,13 +309,14 @@ class EqualizerProvider extends ChangeNotifier {
   double _safeGain(double gain) => gain.clamp(_hwMinGain, _hwMaxGain);
 
   List<double> _antiClip(List<double> gains) {
-    double maxBoost = 0;
+    double maxBoost = 0.0;
     for (final g in gains) {
       if (g > maxBoost) maxBoost = g;
     }
-    if (maxBoost <= 6.0) return gains;
-    final scale = 6.0 / maxBoost;
-    return gains.map((g) => g * scale).toList();
+    if (maxBoost > 0.0) {
+      return gains.map((g) => g - maxBoost).toList();
+    }
+    return gains;
   }
 
   // ─────────────────────────────────────────────────────────────────────────

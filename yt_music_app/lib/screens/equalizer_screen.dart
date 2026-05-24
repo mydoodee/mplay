@@ -433,8 +433,8 @@ class EqualizerScreen extends StatelessWidget {
       l10n.eqBandBrilliance,
     ];
 
-    final value = eqProvider.bandValues[index].clamp(-3.0, 3.0);
-    final double percent = (value + 3.0) / 6.0;
+    final value = eqProvider.bandValues[index].clamp(-10.0, 10.0);
+    final double percent = (value + 10.0) / 20.0;
 
     return Expanded(
       child: Column(
@@ -576,8 +576,8 @@ class EqualizerScreen extends StatelessWidget {
                     ),
                     child: Slider(
                       value: value,
-                      min: -3,
-                      max: 3,
+                      min: -10,
+                      max: 10,
                       onChanged: (val) => eqProvider.setBandValueVisual(index, val),
                       onChangeEnd: (val) => eqProvider.commitBandValue(index, val),
                     ),
