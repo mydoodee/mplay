@@ -1,9 +1,16 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
+import 'package:audio_service/audio_service.dart';
+import 'package:provider/provider.dart';
 import 'home_screen.dart';
 import '../widgets/app_logo.dart';
 import '../l10n/app_localizations.dart';
+import '../main.dart' show audioHandler;
+import '../services/audio_handler.dart';
+import '../services/equalizer_provider.dart';
+import '../services/heartbeat_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -90,21 +97,60 @@ class _SplashScreenState extends State<SplashScreen>
       if (mounted) _barController.forward();
     });
 
-    // Navigate
-    Timer(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 600),
-            pageBuilder: (_, _, _) => const HomeScreen(),
-            transitionsBuilder: (_, animation, _, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-          ),
-        );
-      }
-    });
+    // Init heavy services in background while animations play
+    _initServicesAndNavigate();
+  }
+
+  Future<void> _initServicesAndNavigate() async {
+    // Run audio init and minimum splash duration concurrently
+    await Future.wait([
+      _initAudioServices(),
+      Future.delayed(const Duration(milliseconds: 2800)),
+    ]);
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 600),
+        pageBuilder: (ctx, _, _) {
+          // ห่อ HomeScreen ด้วย EqualizerProvider ผ่าน Navigator ระดับล่าง
+          // เพื่อให้ทุก route ที่ push จาก HomeScreen เข้าถึง EQ ได้
+          if (audioHandler != null) {
+            return ChangeNotifierProvider<EqualizerProvider>(
+              create: (_) => EqualizerProvider(audioHandler!),
+              child: const _HomeWrapper(),
+            );
+          }
+          return const HomeScreen();
+        },
+        transitionsBuilder: (_, animation, _, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+  }
+
+
+  Future<void> _initAudioServices() async {
+    try {
+      audioHandler = await AudioService.init(
+        builder: () => MyAudioHandler(),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.ytmusic.channel.audio',
+          androidNotificationChannelName: 'YouTube Music Playback',
+          androidStopForegroundOnPause: true,
+          androidNotificationIcon: 'mipmap/launcher_icon',
+        ),
+      );
+      debugPrint('✅ AudioService initialized successfully');
+    } catch (e) {
+      debugPrint('⚠️ AudioService init failed: $e');
+    }
+
+    // HeartbeatService is lightweight — init after audio
+    HeartbeatService().init();
   }
 
   @override
@@ -301,6 +347,48 @@ class _SplashScreenState extends State<SplashScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Wrapper ที่ใช้ nested Navigator
+/// เพื่อให้ EqualizerProvider ครอบทุก route ที่ push จาก HomeScreen ได้
+/// ใช้ PopScope เพื่อดัก Android back button → pop nested navigator ก่อน
+class _HomeWrapper extends StatefulWidget {
+  const _HomeWrapper();
+
+  @override
+  State<_HomeWrapper> createState() => _HomeWrapperState();
+}
+
+class _HomeWrapperState extends State<_HomeWrapper> {
+  final GlobalKey<NavigatorState> _nestedNavKey = GlobalKey<NavigatorState>();
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, // เราจัดการ back button เอง
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return; // ถ้า pop สำเร็จแล้วไม่ต้องทำอะไร
+
+        final nestedNav = _nestedNavKey.currentState;
+        if (nestedNav != null && nestedNav.canPop()) {
+          // ยังมี route ใน nested navigator → ถอยกลับ
+          nestedNav.pop();
+        } else {
+          // อยู่หน้า Home แล้ว → minimize app (ไม่ exit)
+          SystemNavigator.pop();
+        }
+      },
+      child: Navigator(
+        key: _nestedNavKey,
+        onGenerateRoute: (settings) {
+          return MaterialPageRoute(
+            builder: (_) => const HomeScreen(),
+            settings: settings,
+          );
+        },
       ),
     );
   }

@@ -961,6 +961,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Find the perfect music for your mood'**
   String get exploreSubtitle;
+
+  /// No description provided for @downloadSong.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get downloadSong;
+
+  /// No description provided for @downloadingSong.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading...'**
+  String get downloadingSong;
+
+  /// No description provided for @downloadComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Download complete! Added to Local Files'**
+  String get downloadComplete;
+
+  /// No description provided for @downloadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed. Please try again'**
+  String get downloadError;
+
+  /// No description provided for @alreadyDownloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Already downloaded'**
+  String get alreadyDownloaded;
 }
 
 class _AppLocalizationsDelegate

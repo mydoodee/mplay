@@ -487,4 +487,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exploreSubtitle => 'Find the perfect music for your mood';
+
+  @override
+  String get downloadSong => 'Download';
+
+  @override
+  String get downloadingSong => 'Downloading...';
+
+  @override
+  String get downloadComplete => 'Download complete! Added to Local Files';
+
+  @override
+  String get downloadError => 'Download failed. Please try again';
+
+  @override
+  String get alreadyDownloaded => 'Already downloaded';
 }
