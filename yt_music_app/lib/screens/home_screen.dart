@@ -35,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
   int _selectedIndex = 0;
+  bool _initialTabChecked = false;
   String _appVersion = '';
   String _listeningText = ''; // real-time text จาก voice search
 
@@ -178,6 +179,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final songProvider = Provider.of<SongProvider>(context);
+
+    // หน้าแรกถ้ายังไม่มี history ให้แสดง tab Explore แทน เพื่อ user จะได้ไม่งง
+    if (!_initialTabChecked && songProvider.isHistoryLoaded) {
+      _initialTabChecked = true;
+      if (songProvider.history.isEmpty) {
+        _selectedIndex = 1; // แสดง tab Explore (index 1)
+      }
+    }
+
     return _buildPhoneLayout(songProvider);
   }
 
@@ -607,23 +617,27 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_selectedIndex == 0 && songProvider.isLoading) {
       return [
         SliverFillRemaining(
+          hasScrollBody: false,
           child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(
-                  color: Color(0xFFF15A24),
-                  strokeWidth: 2.5,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  l10n.searching,
-                  style: const TextStyle(
-                    color: Color(0xFF777777),
-                    fontSize: 13,
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(
+                    color: Color(0xFFF15A24),
+                    strokeWidth: 2.5,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.searching,
+                    style: const TextStyle(
+                      color: Color(0xFF777777),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -636,68 +650,72 @@ class _HomeScreenState extends State<HomeScreen> {
         songProvider.history.isEmpty) {
       return [
         SliverFillRemaining(
+          hasScrollBody: false,
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GlowingRing(
-                  color: const Color(0xFFF15A24),
-                  child: Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0D0D0D),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const AppLogo(size: 60, showText: false),
-                        const SizedBox(height: 12),
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                          ).createShader(bounds),
-                          child: Text(
-                            'MPLAY',
-                            style: GoogleFonts.russoOne(
-                              fontSize: 34,
-                              fontWeight: FontWeight.w400,
-                              letterSpacing: 4,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  color: const Color(0xFFFF5722).withValues(alpha: 0.3),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  GlowingRing(
+                    color: const Color(0xFFF15A24),
+                    child: Container(
+                      padding: const EdgeInsets.all(28),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF0D0D0D),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const AppLogo(size: 60, showText: false),
+                          const SizedBox(height: 12),
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ).createShader(bounds),
+                            child: Text(
+                              'MPLAY',
+                              style: GoogleFonts.russoOne(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w400,
+                                letterSpacing: 4,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: const Color(0xFFFF5722).withValues(alpha: 0.3),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  l10n.findSongsYouLike,
-                  style: const TextStyle(
-                    color: Color(0xFF666666),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(height: 20),
+                  Text(
+                    l10n.findSongsYouLike,
+                    style: const TextStyle(
+                      color: Color(0xFF666666),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  l10n.searchSongsArtistsOrLink,
-                  style: const TextStyle(
-                    color: Color(0xFF444444),
-                    fontSize: 12,
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.searchSongsArtistsOrLink,
+                    style: const TextStyle(
+                      color: Color(0xFF444444),
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -800,6 +818,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                         width: 150,
                                         height: 110,
                                         fit: BoxFit.cover,
+                                        memCacheWidth: 250,
+                                        memCacheHeight: 180,
                                       ),
                                     ),
                                   ),
@@ -1092,49 +1112,48 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Container(color: const Color(0xFF1A1A1A)),
-              if (playlist.songs.isNotEmpty)
-                CachedNetworkImage(
-                  imageUrl: playlist.songs[0].maxResThumbnailUrl,
-                  fit: BoxFit.cover,
-                  errorWidget: (context, url, error) => CachedNetworkImage(
-                    imageUrl: playlist.songs[0].hqThumbnailUrl,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, url, err) => Container(
-                      color: const Color(0xFF1A1A1A),
-                      child: const Center(
-                        child: AppLogo(size: 40, showText: false),
+              // Background + image + gradient รวมใน Container เดียว
+              // เพื่อหลีกเลี่ยง GPU alpha compositing bug บน Android head unit
+              Container(
+                color: const Color(0xFF1A1A1A),
+                foregroundDecoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.3, 1.0],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+                  ),
+                ),
+                child: playlist.songs.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: playlist.songs[0].maxResThumbnailUrl,
+                        fit: BoxFit.cover,
+                        memCacheWidth: 250,
+                        memCacheHeight: 160,
+                        errorWidget: (context, url, error) => CachedNetworkImage(
+                          imageUrl: playlist.songs[0].hqThumbnailUrl,
+                          fit: BoxFit.cover,
+                          memCacheWidth: 250,
+                          memCacheHeight: 160,
+                          errorWidget: (context, url, err) => const Center(
+                            child: AppLogo(size: 40, showText: false),
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Icon(
+                          isFavorite
+                              ? Icons.favorite_rounded
+                              : Icons.queue_music_rounded,
+                          color: isFavorite
+                              ? const Color(0xFFFF4466).withValues(alpha: 0.4)
+                              : const Color(0xFF444444),
+                          size: 36,
+                        ),
                       ),
-                    ),
-                  ),
-                ),
-              if (playlist.songs.isEmpty)
-                Center(
-                  child: Icon(
-                    isFavorite
-                        ? Icons.favorite_rounded
-                        : Icons.queue_music_rounded,
-                    color: isFavorite
-                        ? const Color(0xFFFF4466).withValues(alpha: 0.4)
-                        : const Color(0xFF444444),
-                    size: 36,
-                  ),
-                ),
-              // Gradient overlay
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      stops: const [0.3, 1.0],
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.85),
-                      ],
-                    ),
-                  ),
-                ),
               ),
               // Favorite badge
               if (isFavorite)
@@ -1663,9 +1682,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(16),
                 child: Stack(
                   children: [
-                    // Background Image with Fallback Gradient
+                    // Background Image + Gradient รวมเป็น layer เดียว
+                    // ป้องกัน GPU pixel corruption บน Android head unit
                     Positioned.fill(
                       child: Container(
+                        foregroundDecoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.black.withValues(alpha: 0.6),
+                              Colors.black.withValues(alpha: 0.3),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            width: 1,
+                          ),
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
@@ -1679,30 +1713,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: CachedNetworkImage(
                           imageUrl: cat['image'] as String,
                           fit: BoxFit.cover,
+                          memCacheWidth: 350,
+                          memCacheHeight: 220,
                           placeholder: (context, url) => Container(
                             color: Colors.white.withValues(alpha: 0.05),
                           ),
                           errorWidget: (context, url, error) =>
                               const SizedBox.shrink(),
-                        ),
-                      ),
-                    ),
-                    // Dark Overlay
-                    Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.black.withValues(alpha: 0.6),
-                              Colors.black.withValues(alpha: 0.3),
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
-                            width: 1,
-                          ),
                         ),
                       ),
                     ),

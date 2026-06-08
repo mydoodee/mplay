@@ -312,6 +312,8 @@ class SongTile extends StatelessWidget {
                           width: thumbW,
                           height: thumbH,
                           fit: BoxFit.cover,
+                          memCacheWidth: 200,
+                          memCacheHeight: 120,
                           placeholder: (_, _) => Container(
                             width: thumbW,
                             height: thumbH,
