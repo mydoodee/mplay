@@ -44,6 +44,8 @@ class SongProvider with ChangeNotifier {
 
   List<Song> _history = [];
   List<Song> get history => _history;
+  bool _isHistoryLoaded = false;
+  bool get isHistoryLoaded => _isHistoryLoaded;
 
   // Local Music State
   final List<Song> _localSongs = [];
@@ -279,9 +281,11 @@ class SongProvider with ChangeNotifier {
         }
       }
       _history = validHistory;
-      notifyListeners();
     } catch (e) {
       if (kDebugMode) print('Error loading history: $e');
+    } finally {
+      _isHistoryLoaded = true;
+      notifyListeners();
     }
   }
 
