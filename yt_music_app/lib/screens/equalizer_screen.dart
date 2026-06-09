@@ -38,7 +38,7 @@ class EqualizerScreen extends StatelessWidget {
         child: Stack(
           children: [
             // ── Background Ambient Fiery Glows ──
-            
+
             // Top-right soft orange-red glow
             Positioned(
               top: -100,
@@ -58,7 +58,7 @@ class EqualizerScreen extends StatelessWidget {
                 ),
               ),
             ),
-            
+
             // Bottom-left deep red-orange glow
             Positioned(
               bottom: -120,
@@ -78,7 +78,7 @@ class EqualizerScreen extends StatelessWidget {
                 ),
               ),
             ),
-            
+
             // Center molten gold glow (lights up the slider area)
             Positioned(
               bottom: 120,
@@ -141,8 +141,10 @@ class EqualizerScreen extends StatelessWidget {
                         ),
                         Switch(
                           value: eqProvider.isEqualizerEnabled,
-                          activeTrackColor: const Color(0xFF9E0B0F).withOpacity(0.3),
-                          activeColor: const Color(0xFFFF9500),
+                          activeTrackColor: const Color(
+                            0xFF9E0B0F,
+                          ).withOpacity(0.3),
+                          activeThumbColor: const Color(0xFFFF9500),
                           inactiveThumbColor: Colors.grey[600],
                           inactiveTrackColor: Colors.white.withOpacity(0.08),
                           onChanged: eqProvider.setEnabled,
@@ -165,25 +167,34 @@ class EqualizerScreen extends StatelessWidget {
                             // 🎨 Volcanic Glass Preset Selector
                             SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               child: Row(
                                 children: eqProvider.presets.map((preset) {
                                   final isSelected =
                                       preset == eqProvider.selectedPreset;
-                                  final label = _getPresetLabel(context, preset);
+                                  final label = _getPresetLabel(
+                                    context,
+                                    preset,
+                                  );
                                   return Padding(
                                     padding: const EdgeInsets.only(right: 12),
                                     child: GestureDetector(
                                       onTap: () => eqProvider.setPreset(preset),
                                       child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 250),
+                                        duration: const Duration(
+                                          milliseconds: 250,
+                                        ),
                                         curve: Curves.easeInOut,
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 22,
                                           vertical: 11,
                                         ),
                                         decoration: BoxDecoration(
-                                          borderRadius: BorderRadius.circular(25),
+                                          borderRadius: BorderRadius.circular(
+                                            25,
+                                          ),
                                           gradient: isSelected
                                               ? const LinearGradient(
                                                   colors: [
@@ -200,14 +211,20 @@ class EqualizerScreen extends StatelessWidget {
                                               : Colors.white.withOpacity(0.03),
                                           border: Border.all(
                                             color: isSelected
-                                                ? const Color(0xFFFFCC00).withOpacity(0.7)
-                                                : Colors.white.withOpacity(0.06),
+                                                ? const Color(
+                                                    0xFFFFCC00,
+                                                  ).withOpacity(0.7)
+                                                : Colors.white.withOpacity(
+                                                    0.06,
+                                                  ),
                                             width: 1.2,
                                           ),
                                           boxShadow: isSelected
                                               ? [
                                                   BoxShadow(
-                                                    color: const Color(0xFFFF6C00).withOpacity(0.4),
+                                                    color: const Color(
+                                                      0xFFFF6C00,
+                                                    ).withOpacity(0.4),
                                                     blurRadius: 14,
                                                     spreadRadius: 1,
                                                     offset: const Offset(0, 2),
@@ -220,7 +237,9 @@ class EqualizerScreen extends StatelessWidget {
                                           style: TextStyle(
                                             color: isSelected
                                                 ? Colors.white
-                                                : Colors.white.withOpacity(0.45),
+                                                : Colors.white.withOpacity(
+                                                    0.45,
+                                                  ),
                                             fontWeight: isSelected
                                                 ? FontWeight.w900
                                                 : FontWeight.w600,
@@ -249,13 +268,19 @@ class EqualizerScreen extends StatelessWidget {
                             // 🎚 Studio-grade Fiery Equalizer Sliders
                             Expanded(
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
                                 child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
                                   children: List.generate(
                                     eqProvider.bands.length,
-                                    (index) =>
-                                        _buildSlider(context, eqProvider, index),
+                                    (index) => _buildSlider(
+                                      context,
+                                      eqProvider,
+                                      index,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -291,14 +316,23 @@ class EqualizerScreen extends StatelessWidget {
                                           children: [
                                             // Dynamic Fire Icon
                                             AnimatedScale(
-                                              scale: 1.0 + (eqProvider.bassBoosterLevel / 100.0) * 0.25,
-                                              duration: const Duration(milliseconds: 150),
+                                              scale:
+                                                  1.0 +
+                                                  (eqProvider.bassBoosterLevel /
+                                                          100.0) *
+                                                      0.25,
+                                              duration: const Duration(
+                                                milliseconds: 150,
+                                              ),
                                               child: Icon(
                                                 Icons.whatshot_rounded,
                                                 color: Color.lerp(
-                                                  const Color(0xFFED1C24).withOpacity(0.4),
+                                                  const Color(
+                                                    0xFFED1C24,
+                                                  ).withOpacity(0.4),
                                                   const Color(0xFFFFD700),
-                                                  eqProvider.bassBoosterLevel / 100.0,
+                                                  eqProvider.bassBoosterLevel /
+                                                      100.0,
                                                 ),
                                                 size: 22,
                                               ),
@@ -321,14 +355,17 @@ class EqualizerScreen extends StatelessWidget {
                                             color: Color.lerp(
                                               const Color(0xFFED1C24),
                                               const Color(0xFFFFD700),
-                                              eqProvider.bassBoosterLevel / 100.0,
+                                              eqProvider.bassBoosterLevel /
+                                                  100.0,
                                             ),
                                             fontSize: 17,
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: 0.5,
                                             shadows: [
                                               Shadow(
-                                                color: const Color(0xFFED1C24).withOpacity(0.5),
+                                                color: const Color(
+                                                  0xFFED1C24,
+                                                ).withOpacity(0.5),
                                                 blurRadius: 10,
                                               ),
                                             ],
@@ -343,7 +380,9 @@ class EqualizerScreen extends StatelessWidget {
                                         inactiveTrackColor: Colors.transparent,
                                         trackHeight: 12,
                                         thumbColor: Colors.white,
-                                        overlayColor: const Color(0xFFED1C24).withOpacity(0.2),
+                                        overlayColor: const Color(
+                                          0xFFED1C24,
+                                        ).withOpacity(0.2),
                                         thumbShape: const RoundSliderThumbShape(
                                           enabledThumbRadius: 9,
                                           elevation: 4,
@@ -358,29 +397,36 @@ class EqualizerScreen extends StatelessWidget {
                                             width: double.infinity,
                                             decoration: BoxDecoration(
                                               color: const Color(0xFF150A0A),
-                                              borderRadius: BorderRadius.circular(3),
+                                              borderRadius:
+                                                  BorderRadius.circular(3),
                                             ),
                                           ),
                                           // Gradient active track
                                           Align(
                                             alignment: Alignment.centerLeft,
                                             child: FractionallySizedBox(
-                                              widthFactor: eqProvider.bassBoosterLevel / 100.0,
+                                              widthFactor:
+                                                  eqProvider.bassBoosterLevel /
+                                                  100.0,
                                               child: Container(
                                                 height: 6,
                                                 decoration: BoxDecoration(
-                                                  gradient: const LinearGradient(
-                                                    colors: [
-                                                      Color(0xFFED1C24),
-                                                      Color(0xFFF15A24),
-                                                      Color(0xFFFF9500),
-                                                      Color(0xFFFFD700),
-                                                    ],
-                                                  ),
-                                                  borderRadius: BorderRadius.circular(3),
+                                                  gradient:
+                                                      const LinearGradient(
+                                                        colors: [
+                                                          Color(0xFFED1C24),
+                                                          Color(0xFFF15A24),
+                                                          Color(0xFFFF9500),
+                                                          Color(0xFFFFD700),
+                                                        ],
+                                                      ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(3),
                                                   boxShadow: [
                                                     BoxShadow(
-                                                      color: const Color(0xFFED1C24).withOpacity(0.5),
+                                                      color: const Color(
+                                                        0xFFED1C24,
+                                                      ).withOpacity(0.5),
                                                       blurRadius: 8,
                                                     ),
                                                   ],
@@ -393,8 +439,10 @@ class EqualizerScreen extends StatelessWidget {
                                             value: eqProvider.bassBoosterLevel,
                                             min: 0,
                                             max: 100,
-                                            onChanged: eqProvider.setBassBoosterVisual,
-                                            onChangeEnd: eqProvider.commitBassBooster,
+                                            onChanged:
+                                                eqProvider.setBassBoosterVisual,
+                                            onChangeEnd:
+                                                eqProvider.commitBassBooster,
                                           ),
                                         ],
                                       ),
@@ -456,8 +504,8 @@ class EqualizerScreen extends StatelessWidget {
               color: value == 0
                   ? Colors.white38
                   : value > 0
-                      ? const Color(0xFFFFD700)
-                      : const Color(0xFF8888FF),
+                  ? const Color(0xFFFFD700)
+                  : const Color(0xFF8888FF),
               fontSize: 9,
               fontWeight: FontWeight.w700,
             ),
@@ -578,8 +626,10 @@ class EqualizerScreen extends StatelessWidget {
                       value: value,
                       min: -10,
                       max: 10,
-                      onChanged: (val) => eqProvider.setBandValueVisual(index, val),
-                      onChangeEnd: (val) => eqProvider.commitBandValue(index, val),
+                      onChanged: (val) =>
+                          eqProvider.setBandValueVisual(index, val),
+                      onChangeEnd: (val) =>
+                          eqProvider.commitBandValue(index, val),
                     ),
                   ),
                 ),
@@ -593,9 +643,17 @@ class EqualizerScreen extends StatelessWidget {
           Text(
             bandLabels[index],
             style: TextStyle(
-              color: percent > 0.5 
-                  ? Color.lerp(const Color(0xFFF15A24), const Color(0xFFFFD700), (percent - 0.5) * 2)
-                  : Color.lerp(const Color(0xFF993333), const Color(0xFFF15A24), percent * 2),
+              color: percent > 0.5
+                  ? Color.lerp(
+                      const Color(0xFFF15A24),
+                      const Color(0xFFFFD700),
+                      (percent - 0.5) * 2,
+                    )
+                  : Color.lerp(
+                      const Color(0xFF993333),
+                      const Color(0xFFF15A24),
+                      percent * 2,
+                    ),
               fontSize: 9,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,

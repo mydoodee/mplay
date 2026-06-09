@@ -194,9 +194,11 @@ class DbHelper {
   Future<void> addToHistory(Song song) async {
     try {
       final db = await database;
-      // Remove if exists to move to top
-      await db.delete('history', where: 'video_id = ?', whereArgs: [song.id]);
-      await db.insert('history', song.toMap());
+      // Remove if exists to move to top, running in transaction to be safe
+      await db.transaction((txn) async {
+        await txn.delete('history', where: 'video_id = ?', whereArgs: [song.id]);
+        await txn.insert('history', song.toMap());
+      });
     } catch (e) {
       print('DB Error addToHistory: $e');
     }
@@ -205,6 +207,10 @@ class DbHelper {
   Future<List<Song>> getHistory() async {
     try {
       final db = await database;
+      // Clean up duplicates from database
+      await db.execute(
+        'DELETE FROM history WHERE id NOT IN (SELECT MAX(id) FROM history GROUP BY video_id)'
+      );
       final List<Map<String, dynamic>> maps =
           await db.query('history', orderBy: 'played_at DESC', limit: 50);
       return List.generate(maps.length, (i) => Song.fromMap(maps[i]));

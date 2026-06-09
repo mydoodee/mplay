@@ -92,17 +92,23 @@ class PlaylistScreen extends StatelessWidget {
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(16),
                                         color: const Color(0xFF1A1A1A),
-                                        image:
-                                            songs.isNotEmpty &&
-                                                songs[0].thumbnail != "NA" &&
-                                                songs[0].thumbnail.isNotEmpty
-                                            ? DecorationImage(
-                                                image:
-                                                    CachedNetworkImageProvider(
-                                                      songs[0].thumbnail,
+                                        image: songs.isNotEmpty
+                                            ? (songs[0].isLocal
+                                                ? (songs[0].coverArtBytes != null
+                                                    ? DecorationImage(
+                                                        image: MemoryImage(
+                                                          songs[0].coverArtBytes!,
+                                                        ),
+                                                        fit: BoxFit.cover,
+                                                      )
+                                                    : null)
+                                                : DecorationImage(
+                                                    image:
+                                                        CachedNetworkImageProvider(
+                                                      songs[0].thumbnailUrl,
                                                     ),
-                                                fit: BoxFit.cover,
-                                              )
+                                                    fit: BoxFit.cover,
+                                                  ))
                                             : null,
                                         boxShadow: [
                                           BoxShadow(
@@ -114,16 +120,16 @@ class PlaylistScreen extends StatelessWidget {
                                           ),
                                         ],
                                       ),
-                                      child:
-                                          (songs.isEmpty ||
-                                              songs[0].thumbnail == "NA" ||
-                                              songs[0].thumbnail.isEmpty)
+                                      child: (songs.isEmpty ||
+                                              (songs[0].isLocal &&
+                                                  songs[0].coverArtBytes ==
+                                                      null))
                                           ? Center(
                                               child: AppLogo(
                                                 size:
                                                     Responsive.isTablet(context)
-                                                    ? 56
-                                                    : 32,
+                                                        ? 56
+                                                        : 32,
                                                 showText: false,
                                               ),
                                             )

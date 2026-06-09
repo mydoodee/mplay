@@ -799,8 +799,8 @@ class MyAudioHandler extends BaseAudioHandler {
     Uri? artUri;
     if (song.isLocal) {
       artUri = null;
-    } else if (song.thumbnail.isNotEmpty && song.thumbnail != "NA") {
-      artUri = Uri.parse(song.thumbnail);
+    } else {
+      artUri = Uri.parse(song.thumbnailUrl);
     }
 
     return MediaItem(

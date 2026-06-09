@@ -184,25 +184,38 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
                                               ),
                                             ),
                                           ))
-                                    : (currentSong.thumbnail.isNotEmpty &&
-                                        currentSong.thumbnail != "NA"
-                                    ? CachedNetworkImage(
-                                        imageUrl: currentSong.thumbnail,
+                                    : CachedNetworkImage(
+                                        imageUrl: currentSong.thumbnailUrl,
                                         width: albumArtSize,
                                         height: albumArtSize,
                                         fit: BoxFit.cover,
-                                      )
-                                    : Container(
-                                        width: albumArtSize,
-                                        height: albumArtSize,
-                                        color: const Color(0xFF252525),
-                                        child: Center(
-                                          child: AppLogo(
-                                            size: isTablet ? 26 : 20,
-                                            showText: false,
+                                        placeholder: (context, url) => Container(
+                                          width: albumArtSize,
+                                          height: albumArtSize,
+                                          color: const Color(0xFF252525),
+                                          child: const Center(
+                                            child: SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 1.5,
+                                                color: Color(0xFFF15A24),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      )),
+                                        errorWidget: (context, url, error) => Container(
+                                          width: albumArtSize,
+                                          height: albumArtSize,
+                                          color: const Color(0xFF252525),
+                                          child: Center(
+                                            child: AppLogo(
+                                              size: isTablet ? 26 : 20,
+                                              showText: false,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
                           ),
                         ),
                         SizedBox(width: isTablet ? 16 : 12),

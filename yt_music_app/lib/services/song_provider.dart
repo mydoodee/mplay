@@ -46,6 +46,7 @@ class SongProvider with ChangeNotifier {
   List<Song> get history => _history;
   bool _isHistoryLoaded = false;
   bool get isHistoryLoaded => _isHistoryLoaded;
+  String? _lastHistorySavedSongId;
 
   // Local Music State
   final List<Song> _localSongs = [];
@@ -59,7 +60,8 @@ class SongProvider with ChangeNotifier {
 
   // Download State
   final Map<String, double> _downloadProgress = {}; // videoId → 0.0-1.0
-  Map<String, double> get downloadProgress => Map.unmodifiable(_downloadProgress);
+  Map<String, double> get downloadProgress =>
+      Map.unmodifiable(_downloadProgress);
   final Set<String> _downloadingIds = {};
 
   SongProvider() {
@@ -92,19 +94,29 @@ class SongProvider with ChangeNotifier {
           }
         }
 
+        final playedSong = Song(
+          id: item.id,
+          title: item.title,
+          artist: item.artist ?? '',
+          thumbnail: item.artUri?.toString() ?? '',
+          duration: item.duration?.inSeconds ?? 0,
+          isLocal: isLocal,
+          filePath: filePath,
+          coverArtBytes: coverArtBytes,
+        );
+
         Future.microtask(() {
-          _currentSong = Song(
-            id: item.id,
-            title: item.title,
-            artist: item.artist ?? '',
-            thumbnail: item.artUri?.toString() ?? '',
-            duration: item.duration?.inSeconds ?? 0,
-            isLocal: isLocal,
-            filePath: filePath,
-            coverArtBytes: coverArtBytes,
-          );
+          _currentSong = playedSong;
           notifyListeners();
         });
+
+        // 🚀 บันทึกประวัติการเล่นเพลงอัตโนมัติเมื่อเริ่มเล่นเพลงใหม่ (รองรับการข้ามเพลงและเล่นออโต้)
+        if (_lastHistorySavedSongId != item.id) {
+          _lastHistorySavedSongId = item.id;
+          _dbHelper.addToHistory(playedSong).then((_) {
+            _loadHistory();
+          });
+        }
       }
     });
   }
@@ -205,18 +217,6 @@ class SongProvider with ChangeNotifier {
       } else {
         await audioHandler?.playSong(song);
       }
-
-      // 🚀 อัปเดต history ใน DB แบบ background
-      // แต่ถ้าเพลงนี้มีอยู่ใน list แล้ว ให้คงลำดับเดิมไว้ ไม่ reload ใหม่
-      // เพื่อไม่ให้เพลงที่เล่นเด้งขึ้นบนสุด
-      _dbHelper.addToHistory(song).then((_) {
-        final alreadyInHistory = _history.any((s) => s.id == song.id);
-        if (!alreadyInHistory) {
-          // เพลงใหม่ที่ไม่เคยเล่นมาก่อน → reload เพื่อเพิ่มขึ้นบนสุด
-          _loadHistory();
-        }
-        // เพลงที่มีอยู่แล้ว → ไม่ต้อง reload เพราะ isPlaying จะอัปเดตผ่าน audioHandler listener อยู่แล้ว
-      });
     } catch (e) {
       if (kDebugMode) {
         print('DB/Audio Error in playSong: $e');
@@ -226,17 +226,6 @@ class SongProvider with ChangeNotifier {
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
-
-    // 🚀 บันทึกประวัติเฉพาะเพลงที่เล่นจริง (ไม่บันทึกทั้ง queue เพื่อประหยัด DB I/O)
-    Future.microtask(() async {
-      if (songs.isNotEmpty && initialIndex < songs.length) {
-        await _dbHelper.addToHistory(songs[initialIndex]);
-        final alreadyInHistory = _history.any((s) => s.id == songs[initialIndex].id);
-        if (!alreadyInHistory) {
-          await _loadHistory();
-        }
-      }
-    });
   }
 
   Future<void> shuffleAll(List<Song> songs) async {
@@ -272,12 +261,16 @@ class SongProvider with ChangeNotifier {
     try {
       final rawHistory = await _dbHelper.getHistory();
       final validHistory = <Song>[];
+      final seenIds = <String>{};
       for (final song in rawHistory) {
         if (song.id.startsWith('local_') &&
             (song.filePath == null || song.filePath!.isEmpty)) {
           await _dbHelper.removeFromHistory(song.id);
         } else {
-          validHistory.add(await _withCoverArt(song));
+          if (!seenIds.contains(song.id)) {
+            seenIds.add(song.id);
+            validHistory.add(await _withCoverArt(song));
+          }
         }
       }
       _history = validHistory;
@@ -476,6 +469,7 @@ class SongProvider with ChangeNotifier {
   Future<void> clearHistory() async {
     await _dbHelper.clearHistory();
     _history.clear();
+    _lastHistorySavedSongId = null;
     notifyListeners();
   }
 
@@ -483,6 +477,9 @@ class SongProvider with ChangeNotifier {
   Future<void> removeFromHistory(Song song) async {
     await _dbHelper.removeFromHistory(song.id);
     _history.removeWhere((s) => s.id == song.id);
+    if (_lastHistorySavedSongId == song.id) {
+      _lastHistorySavedSongId = null;
+    }
     notifyListeners();
   }
 
@@ -490,8 +487,9 @@ class SongProvider with ChangeNotifier {
 
   /// ตรวจสอบว่าเพลงนี้ download แล้วหรือยัง
   bool isDownloaded(String videoId) {
-    return _localSongs.any((s) =>
-        s.filePath != null && s.filePath!.contains(videoId));
+    return _localSongs.any(
+      (s) => s.filePath != null && s.filePath!.contains(videoId),
+    );
   }
 
   /// ตรวจสอบว่ากำลัง download อยู่หรือไม่
