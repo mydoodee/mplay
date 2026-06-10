@@ -1038,8 +1038,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 width: 150,
                                                 height: 110,
                                                 fit: BoxFit.cover,
-                                                memCacheWidth: 250,
-                                                memCacheHeight: 180,
                                                 placeholder: (context, url) => Container(
                                                   width: 150,
                                                   height: 110,
@@ -1274,8 +1272,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 62,
                         height: 62,
                         fit: BoxFit.cover,
-                        memCacheWidth: 124,
-                        memCacheHeight: 124,
                         placeholder: (_, _) => Container(
                           width: 62,
                           height: 62,
@@ -1461,14 +1457,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? CachedNetworkImage(
                         imageUrl: playlist.songs[0].maxResThumbnailUrl,
                         fit: BoxFit.cover,
-                        memCacheWidth: 250,
-                        memCacheHeight: 160,
                         errorWidget: (context, url, error) =>
                             CachedNetworkImage(
                               imageUrl: playlist.songs[0].hqThumbnailUrl,
                               fit: BoxFit.cover,
-                              memCacheWidth: 250,
-                              memCacheHeight: 160,
                               errorWidget: (context, url, err) => const Center(
                                 child: AppLogo(size: 40, showText: false),
                               ),
@@ -2044,8 +2036,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: CachedNetworkImage(
                           imageUrl: cat['image'] as String,
                           fit: BoxFit.cover,
-                          memCacheWidth: 350,
-                          memCacheHeight: 220,
                           placeholder: (context, url) => Container(
                             color: Colors.white.withValues(alpha: 0.05),
                           ),

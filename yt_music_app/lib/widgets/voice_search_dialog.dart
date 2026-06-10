@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
+import '../services/native_speech_service.dart';
 
 class VoiceSearchDialog extends StatefulWidget {
   final String initialLocale;
@@ -13,11 +15,13 @@ class VoiceSearchDialog extends StatefulWidget {
 
 class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     with SingleTickerProviderStateMixin {
+  // Fallback: speech_to_text (ใช้เมื่อ native intent ล้มเหลว)
   final SpeechToText _stt = SpeechToText();
   bool _isListening = false;
   String _recognizedWords = '';
   String _errorMessage = '';
   bool _showSettingsButton = false;
+  bool _usingFallback = false; // true = กำลังใช้ speech_to_text fallback
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -37,6 +41,44 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   }
 
   Future<void> _initAndStart() async {
+    // ────────────────────────────────────────────────
+    //  ลอง Native Intent ก่อน (เหมือน YouTube)
+    // ────────────────────────────────────────────────
+    try {
+      final result = await NativeSpeechService.recognize(
+        locale: widget.initialLocale,
+        prompt: '', // ไม่แสดง prompt เพิ่มเติม — ให้ native UI จัดการ
+      );
+
+      if (!mounted) return;
+
+      if (result != null && result.isNotEmpty) {
+        // สำเร็จ! ส่งผลลัพธ์กลับไป
+        Navigator.pop(context, result);
+        return;
+      } else {
+        // ผู้ใช้กดยกเลิก → ปิด dialog
+        Navigator.pop(context);
+        return;
+      }
+    } on PlatformException catch (e) {
+      // Native intent ไม่พร้อมใช้งาน → fallback ไป speech_to_text
+      debugPrint('Native speech failed (${e.code}): ${e.message}');
+      if (!mounted) return;
+      _startFallback();
+    } catch (e) {
+      debugPrint('Native speech error: $e');
+      if (!mounted) return;
+      _startFallback();
+    }
+  }
+
+  // ────────────────────────────────────────────────
+  //  Fallback: ใช้ speech_to_text package (เดิม)
+  // ────────────────────────────────────────────────
+  Future<void> _startFallback() async {
+    setState(() => _usingFallback = true);
+
     try {
       var status = await Permission.microphone.status;
       if (!status.isGranted) {
@@ -138,6 +180,41 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
+    // ถ้ากำลังใช้ native intent → แสดงหน้าจอรอ (native UI จะแสดงทับ)
+    if (!_usingFallback) {
+      return Scaffold(
+        backgroundColor: Colors.black.withValues(alpha: 0.9),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              const Spacer(),
+              const CircularProgressIndicator(
+                color: Color(0xFFF15A24),
+                strokeWidth: 2.5,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                l10n.voiceListening,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 16,
+                ),
+              ),
+              const Spacer(flex: 2),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ──── Fallback UI (speech_to_text) ────
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: 0.9),
       body: SafeArea(

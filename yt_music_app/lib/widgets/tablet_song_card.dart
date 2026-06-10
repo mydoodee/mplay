@@ -313,8 +313,6 @@ class TabletSongCard extends StatelessWidget {
                             : CachedNetworkImage(
                                 imageUrl: song.thumbnailUrl,
                                 fit: BoxFit.cover,
-                                memCacheWidth: 400,
-                                memCacheHeight: 225,
                                 placeholder: (_, _) => Container(
                                   color: const Color(0xFF1E1E1E),
                                   child: const Center(
