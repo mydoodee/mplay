@@ -8,6 +8,7 @@ import '../models/song.dart';
 import '../models/playlist.dart';
 import 'api_service.dart';
 import 'local_music_service.dart';
+import 'playback_state_service.dart';
 import '../database/db_helper.dart';
 import '../main.dart'; // To access audioHandler
 
@@ -72,12 +73,18 @@ class SongProvider with ChangeNotifier {
       _loadHistory();
       _loadLocalSongs();
       _initAudioListener();
+      _loadLastPlaybackState();
     });
   }
 
-  void _initAudioListener() {
+  void _initAudioListener() async {
+    // Wait for audioHandler to be initialized
+    while (audioHandler == null) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
     // Sync current song with audio handler
-    audioHandler?.mediaItem.listen((item) async {
+    audioHandler!.mediaItem.listen((item) async {
       if (item != null && item.id.isNotEmpty) {
         final isLocal = item.extras?['isLocal'] == true;
         final filePath = item.extras?['filePath'] as String?;
@@ -119,6 +126,38 @@ class SongProvider with ChangeNotifier {
         }
       }
     });
+  }
+
+  Future<void> _loadLastPlaybackState() async {
+    // Wait for audioHandler to be initialized
+    while (audioHandler == null) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    try {
+      final savedState = await PlaybackStateService.loadPlaybackState();
+      if (savedState != null) {
+        final Song song = savedState['song'] as Song;
+        final int positionSec = savedState['position'] as int;
+        final List<Song> queueSongs = savedState['queue'] as List<Song>;
+        final int queueIndex = savedState['queueIndex'] as int;
+
+        if (queueSongs.isNotEmpty) {
+          if (kDebugMode) {
+            print('⏮️ Restoring saved playback state: song=${song.title}, position=${positionSec}s');
+          }
+          await audioHandler!.restoreQueue(
+            queueSongs,
+            initialIndex: queueIndex,
+            position: Duration(seconds: positionSec),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ SongProvider: Error restoring playback state: $e');
+      }
+    }
   }
 
   Future<void> search(String query) async {

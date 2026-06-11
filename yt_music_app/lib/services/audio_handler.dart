@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/song.dart';
 import '../config/api_config.dart';
 import 'api_service.dart';
+import 'playback_state_service.dart';
 
 class MyAudioHandler extends BaseAudioHandler {
   final equalizer = AndroidEqualizer();
@@ -18,6 +19,7 @@ class MyAudioHandler extends BaseAudioHandler {
   Timer? _positionTimer;
   Timer? _loadingWatchdog;
   Timer? _changingSongTimeout; // auto-reset _isChangingSong
+  Timer? _persistenceTimer;
   bool _isChangingSong = false;
   bool _isHandlingError = false; // ป้องกัน handlePlaybackError ซ้อนกัน
   static const int _maxQueueSize = 200; // จำกัดขนาด queue
@@ -62,6 +64,7 @@ class MyAudioHandler extends BaseAudioHandler {
     // อัพเดทปุ่มเล่น/หยุดเมื่อสถานะการเล่นเปลี่ยน
     _player.playingStream.listen((playing) {
       _broadcastState(_player.playbackEvent);
+      _saveCurrentState();
     });
 
     // Sync shuffle mode changes -> update UI button state
@@ -103,6 +106,10 @@ class MyAudioHandler extends BaseAudioHandler {
       }
     });
 
+    _persistenceTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _saveCurrentState();
+    });
+
     // ตรวจจับการเปลี่ยนเพลงผ่าน sequenceStateStream เพื่อให้ได้ tag (MediaItem) ที่ถูกต้องเสมอ
     // แก้ปัญหา UI (ตัว select) เด้งไปมาเมื่อ index ของ playlist และ queue ไม่ตรงกันชั่วคราว
     _player.sequenceStateStream.listen((sequenceState) {
@@ -110,6 +117,7 @@ class MyAudioHandler extends BaseAudioHandler {
         final tag = sequenceState!.currentSource!.tag;
         if (tag is MediaItem) {
           mediaItem.add(tag);
+          _saveCurrentState();
 
           // สั่ง pre-cache โดยใช้ index จาก queue (ค้นหาจาก id ปัจจุบัน)
           final currentIndexInQueue = queue.value.indexWhere(
@@ -793,6 +801,7 @@ class MyAudioHandler extends BaseAudioHandler {
     _endChangingSong();
     await _player.stop();
     _positionTimer?.cancel();
+    _persistenceTimer?.cancel();
   }
 
   MediaItem _songToMediaItem(Song song) {
@@ -851,5 +860,80 @@ class MyAudioHandler extends BaseAudioHandler {
         queueIndex: event.currentIndex ?? (_player.currentIndex ?? 0),
       ),
     );
+  }
+
+  Song _mediaItemToSong(MediaItem item) {
+    return Song(
+      id: item.id,
+      title: item.title,
+      artist: item.artist ?? '',
+      thumbnail: item.artUri?.toString() ?? '',
+      duration: item.duration?.inSeconds ?? 0,
+      isLocal: item.extras?['isLocal'] == true,
+      isLive: item.extras?['isLive'] == true,
+      filePath: item.extras?['filePath'] as String?,
+    );
+  }
+
+  void _saveCurrentState() {
+    final currentItem = mediaItem.value;
+    if (currentItem == null || currentItem.id.isEmpty) return;
+    
+    final currentQueue = queue.value.map(_mediaItemToSong).toList();
+    if (currentQueue.isEmpty) return;
+
+    final song = _mediaItemToSong(currentItem);
+    final position = _player.position.inSeconds;
+    final queueIndex = _player.currentIndex ?? 0;
+
+    PlaybackStateService.savePlaybackState(
+      song: song,
+      position: position,
+      queue: currentQueue,
+      queueIndex: queueIndex,
+    );
+  }
+
+  Future<void> restoreQueue(List<Song> songs, {int initialIndex = 0, Duration position = Duration.zero}) async {
+    if (songs.isEmpty) return;
+
+    _startChangingSongGuard();
+    songs = List<Song>.from(songs);
+
+    final items = songs.map(_songToMediaItem).toList();
+    queue.add(items);
+
+    if (initialIndex >= 0 && initialIndex < items.length) {
+      mediaItem.add(items[initialIndex]);
+    }
+
+    final allSources = songs.asMap().entries.map((entry) {
+      final i = entry.key;
+      final s = entry.value;
+      return s.isLocal && s.filePath != null
+          ? AudioSource.file(s.filePath!, tag: items[i])
+          : AudioSource.uri(
+              Uri.parse(ApiConfig.streamUrl(s.id)),
+              tag: items[i],
+              headers: {
+                'User-Agent': 'Mozilla/5.0',
+                if (s.isLive || s.duration == 0) 'Accept-Encoding': 'identity',
+              },
+            );
+    }).toList();
+
+    try {
+      await _player.stop();
+      await _playlist.clear();
+      await _playlist.addAll(allSources);
+      await _player.seek(position, index: initialIndex);
+      if (kDebugMode) {
+        print('✅ restoreQueue: loaded ${allSources.length} sources, position=${position.inSeconds}s, index=$initialIndex (paused)');
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Error in restoreQueue: $e');
+    } finally {
+      _endChangingSong();
+    }
   }
 }

@@ -49,6 +49,7 @@ class _MiniPlayerState extends State<MiniPlayer> with SingleTickerProviderStateM
 
     return StreamBuilder<PlaybackState>(
       stream: audioHandler?.playbackState,
+      initialData: audioHandler?.playbackState.value,
       builder: (context, snapshot) {
         final playbackState = snapshot.data;
         final playing = playbackState?.playing ?? false;

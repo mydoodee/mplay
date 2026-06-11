@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
 import '../services/native_speech_service.dart';
@@ -15,15 +15,17 @@ class VoiceSearchDialog extends StatefulWidget {
 
 class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     with SingleTickerProviderStateMixin {
-  // Fallback: speech_to_text (ใช้เมื่อ native intent ล้มเหลว)
-  final SpeechToText _stt = SpeechToText();
   bool _isListening = false;
   String _recognizedWords = '';
+  String _partialWords = '';
   String _errorMessage = '';
-  bool _showSettingsButton = false;
-  bool _usingFallback = false; // true = กำลังใช้ speech_to_text fallback
+  bool _showTextInput = false; // true = แสดงช่องพิมพ์ค้นหาแทน
+  double _rmsLevel = 0.0;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
+  StreamSubscription? _eventSub;
+  final TextEditingController _textController = TextEditingController();
+  final FocusNode _textFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -41,238 +43,339 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   }
 
   Future<void> _initAndStart() async {
-    // ────────────────────────────────────────────────
-    //  ลอง Native Intent ก่อน (เหมือน YouTube)
-    // ────────────────────────────────────────────────
-    try {
-      final result = await NativeSpeechService.recognize(
-        locale: widget.initialLocale,
-        prompt: '', // ไม่แสดง prompt เพิ่มเติม — ให้ native UI จัดการ
-      );
-
-      if (!mounted) return;
-
-      if (result != null && result.isNotEmpty) {
-        // สำเร็จ! ส่งผลลัพธ์กลับไป
-        Navigator.pop(context, result);
-        return;
-      } else {
-        // ผู้ใช้กดยกเลิก → ปิด dialog
-        Navigator.pop(context);
-        return;
-      }
-    } on PlatformException catch (e) {
-      // Native intent ไม่พร้อมใช้งาน → fallback ไป speech_to_text
-      debugPrint('Native speech failed (${e.code}): ${e.message}');
-      if (!mounted) return;
-      _startFallback();
-    } catch (e) {
-      debugPrint('Native speech error: $e');
-      if (!mounted) return;
-      _startFallback();
-    }
-  }
-
-  // ────────────────────────────────────────────────
-  //  Fallback: ใช้ speech_to_text package (เดิม)
-  // ────────────────────────────────────────────────
-  Future<void> _startFallback() async {
-    setState(() => _usingFallback = true);
-
-    try {
-      var status = await Permission.microphone.status;
+    // ขอ permission ไมค์ก่อน
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
       if (!status.isGranted) {
-        status = await Permission.microphone.request();
-        if (!status.isGranted) {
-          if (mounted) {
-            setState(() {
-              _errorMessage = 'จำเป็นต้องอนุญาตสิทธิ์การใช้ไมโครโฟน\nเพื่อใช้ฟังก์ชันการค้นหาด้วยเสียง';
-              _showSettingsButton = true;
-              _isListening = false;
-            });
-          }
-          return;
-        }
-      }
-
-      bool available = await _stt.initialize(
-        onError: (errorNotification) {
-          if (mounted) {
-            setState(() {
-              _errorMessage = 'เกิดข้อผิดพลาด: ${errorNotification.errorMsg}\n(รหัสข้อผิดพลาด: ${errorNotification.permanent ? "ถาวร" : "ชั่วคราว"})';
-              _isListening = false;
-            });
-          }
-        },
-        onStatus: (status) {
-          if (status == 'notListening') {
-            if (mounted && _recognizedWords.isNotEmpty) {
-              Navigator.pop(context, _recognizedWords);
-            }
-          }
-        },
-      );
-
-      if (available) {
-        _startListening();
-      } else {
         if (mounted) {
           setState(() {
-            _errorMessage = 'ระบบค้นหาด้วยเสียงไม่พร้อมใช้งานบนจอรถยนต์นี้\n\n'
-                'วิธีแก้ไข:\n'
-                '1. ติดตั้งแอป "Google" หรือ "Speech Services by Google" จาก Play Store\n'
-                '2. ไปที่ ตั้งค่า (Settings) ของจอรถยนต์ -> ภาษาและการป้อนข้อมูล (Languages & Input) -> ป้อนข้อมูลด้วยเสียง (Voice Input) และเลือก Google เป็นบริการเริ่มต้น';
-            _isListening = false;
+            _errorMessage = 'จำเป็นต้องอนุญาตสิทธิ์การใช้ไมโครโฟน';
+            _showTextInput = true;
           });
         }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          final errStr = e.toString();
-          if (errStr.contains('recognizerNotAvailable') ||
-              errStr.contains('Speech recognition not available')) {
-            _errorMessage = 'ระบบค้นหาด้วยเสียงไม่พร้อมใช้งานบนจอรถยนต์นี้\n\n'
-                'วิธีแก้ไข:\n'
-                '1. ติดตั้งแอป "Google" หรือ "Speech Services by Google" จาก Play Store\n'
-                '2. ไปที่ ตั้งค่า (Settings) ของจอรถยนต์ -> ภาษาและการป้อนข้อมูล (Languages & Input) -> ป้อนข้อมูลด้วยเสียง (Voice Input) และเลือก Google เป็นบริการเริ่มต้น';
-          } else {
-            _errorMessage = 'เกิดข้อผิดพลาดในการเชื่อมต่อไมค์: $e';
-          }
-          _isListening = false;
-        });
+        return;
       }
     }
+
+    // เช็คว่ามี recognizer พร้อมใช้งานไหม
+    final available = await NativeSpeechService.isAvailable();
+    if (!available) {
+      if (mounted) {
+        // ไม่มี recognizer → เปิดโหมดพิมพ์ค้นหาเลย ไม่ต้องให้ผู้ใช้ไปตั้งค่าอะไร
+        setState(() {
+          _showTextInput = true;
+        });
+        // Focus ที่ช่องพิมพ์
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _textFocusNode.requestFocus();
+        });
+      }
+      return;
+    }
+
+    // มี recognizer → เริ่มฟัง
+    _startListening();
   }
 
-  void _startListening() async {
+  void _startListening() {
     setState(() {
       _isListening = true;
       _recognizedWords = '';
+      _partialWords = '';
       _errorMessage = '';
     });
 
-    await _stt.listen(
-      onResult: (result) {
-        setState(() {
-          _recognizedWords = result.recognizedWords;
-        });
-        if (result.finalResult && result.recognizedWords.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) Navigator.pop(context, result.recognizedWords);
+    // Subscribe to speech events
+    _eventSub?.cancel();
+    _eventSub = NativeSpeechService.events.listen((event) {
+      if (!mounted) return;
+      final eventType = event['event'] as String?;
+
+      switch (eventType) {
+        case 'partialResult':
+          setState(() {
+            _partialWords = event['text'] as String? ?? '';
           });
-        }
-      },
-      localeId: widget.initialLocale,
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 5),
-    );
+          break;
+        case 'finalResult':
+          final text = event['text'] as String? ?? '';
+          if (text.isNotEmpty) {
+            setState(() {
+              _recognizedWords = text;
+            });
+          }
+          break;
+        case 'rms':
+          final value = event['value'];
+          if (value is num) {
+            setState(() {
+              _rmsLevel = value.toDouble().clamp(-2.0, 12.0);
+            });
+          }
+          break;
+        case 'error':
+          final code = event['code'] as String? ?? '';
+          if (code == 'NO_MATCH' || code == 'SPEECH_TIMEOUT') {
+            // ไม่พูดอะไร → เปิดโหมดพิมพ์
+            setState(() {
+              _isListening = false;
+              _showTextInput = true;
+            });
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) _textFocusNode.requestFocus();
+            });
+          } else {
+            setState(() {
+              _isListening = false;
+              _errorMessage = 'เกิดข้อผิดพลาด: $code';
+              _showTextInput = true;
+            });
+            Future.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) _textFocusNode.requestFocus();
+            });
+          }
+          break;
+        case 'speechEnd':
+          setState(() => _isListening = false);
+          break;
+      }
+    });
+
+    // เริ่ม recognize
+    NativeSpeechService.recognize(
+      locale: widget.initialLocale,
+    ).then((result) {
+      if (!mounted) return;
+      if (result != null && result.isNotEmpty) {
+        // สำเร็จ! ส่งผลลัพธ์กลับไป
+        Navigator.pop(context, result);
+      } else {
+        // ไม่มีผลลัพธ์ → เปิดโหมดพิมพ์
+        setState(() {
+          _isListening = false;
+          _showTextInput = true;
+        });
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _textFocusNode.requestFocus();
+        });
+      }
+    }).catchError((e) {
+      if (!mounted) return;
+      if (e is PlatformException && e.code == 'NO_RECOGNIZER') {
+        // ไม่มี recognizer → เปิดโหมดพิมพ์
+        setState(() {
+          _isListening = false;
+          _showTextInput = true;
+        });
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _textFocusNode.requestFocus();
+        });
+      } else {
+        setState(() {
+          _isListening = false;
+          _errorMessage = 'เกิดข้อผิดพลาด: $e';
+          _showTextInput = true;
+        });
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _textFocusNode.requestFocus();
+        });
+      }
+    });
+  }
+
+  void _retryListening() {
+    setState(() {
+      _showTextInput = false;
+      _errorMessage = '';
+    });
+    _startListening();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    _stt.stop();
+    _eventSub?.cancel();
+    _textController.dispose();
+    _textFocusNode.dispose();
+    NativeSpeechService.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final displayText = _recognizedWords.isNotEmpty
+        ? _recognizedWords
+        : (_partialWords.isNotEmpty ? _partialWords : '');
 
-    // ถ้ากำลังใช้ native intent → แสดงหน้าจอรอ (native UI จะแสดงทับ)
-    if (!_usingFallback) {
-      return Scaffold(
-        backgroundColor: Colors.black.withValues(alpha: 0.9),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Align(
-                alignment: Alignment.topRight,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-              const Spacer(),
-              const CircularProgressIndicator(
-                color: Color(0xFFF15A24),
-                strokeWidth: 2.5,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                l10n.voiceListening,
-                style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 16,
-                ),
-              ),
-              const Spacer(flex: 2),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // ──── Fallback UI (speech_to_text) ────
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 0.9),
+      backgroundColor: Colors.black.withValues(alpha: 0.95),
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                onPressed: () => Navigator.pop(context),
+            // ── Header ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // ปุ่มสลับ keyboard / mic
+                  if (!_isListening)
+                    IconButton(
+                      icon: Icon(
+                        _showTextInput ? Icons.mic_rounded : Icons.keyboard_rounded,
+                        color: const Color(0xFF888888),
+                        size: 26,
+                      ),
+                      onPressed: () async {
+                        if (_showTextInput) {
+                          // สลับไปใช้ไมค์
+                          final avail = await NativeSpeechService.isAvailable();
+                          if (avail) {
+                            _retryListening();
+                          } else {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'ไมโครโฟนไม่พร้อมใช้งานบนอุปกรณ์นี้',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                  backgroundColor: Color(0xFF333333),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          }
+                        } else {
+                          // สลับไปใช้ keyboard
+                          setState(() => _showTextInput = true);
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            if (mounted) _textFocusNode.requestFocus();
+                          });
+                        }
+                      },
+                    )
+                  else
+                    const SizedBox(width: 48),
+                  // ปุ่มปิด
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
               ),
             ),
             const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _errorMessage.isNotEmpty
-                    ? _errorMessage
-                    : (_recognizedWords.isEmpty ? l10n.voiceListening : _recognizedWords),
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _errorMessage.isNotEmpty
-                      ? Colors.orangeAccent
-                      : (_recognizedWords.isEmpty ? Colors.grey : Colors.white),
-                  fontSize: _errorMessage.isNotEmpty ? 15 : 24,
-                  fontWeight: FontWeight.w500,
-                  height: 1.5,
+
+            // ── Content ──
+            if (_showTextInput) ...[
+              // ── โหมดพิมพ์ค้นหา ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.keyboard_rounded,
+                      color: Color(0xFF555555),
+                      size: 40,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.voiceListening,
+                      style: const TextStyle(
+                        color: Color(0xFF888888),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: const Color(0xFFF15A24).withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: _textController,
+                        focusNode: _textFocusNode,
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'พิมพ์ชื่อเพลง...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF555555),
+                            fontSize: 16,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          border: InputBorder.none,
+                          suffixIcon: IconButton(
+                            icon: const Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFFF15A24),
+                              size: 26,
+                            ),
+                            onPressed: () {
+                              final text = _textController.text.trim();
+                              if (text.isNotEmpty) {
+                                Navigator.pop(context, text);
+                              }
+                            },
+                          ),
+                        ),
+                        onSubmitted: (text) {
+                          final trimmed = text.trim();
+                          if (trimmed.isNotEmpty) {
+                            Navigator.pop(context, trimmed);
+                          }
+                        },
+                      ),
+                    ),
+                    if (_errorMessage.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFF888888),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-            if (_showSettingsButton) ...[
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => openAppSettings(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF15A24),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            ] else ...[
+              // ── โหมดฟังเสียง ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  displayText.isEmpty ? l10n.voiceListening : displayText,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: displayText.isEmpty ? Colors.grey : Colors.white,
+                    fontSize: displayText.isEmpty ? 18 : 24,
+                    fontWeight: FontWeight.w500,
+                    height: 1.5,
                   ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 12,
-                  ),
-                ),
-                icon: const Icon(Icons.settings),
-                label: const Text(
-                  'เปิดการตั้งค่าของแอป',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                 ),
               ),
-            ],
-            const SizedBox(height: 50),
-            if (_errorMessage.isEmpty)
+              const SizedBox(height: 50),
+              // Mic button with pulse + RMS visualization
               GestureDetector(
                 onTap: () {
                   if (_isListening) {
-                    _stt.stop();
+                    NativeSpeechService.stop();
+                    setState(() => _isListening = false);
                   } else {
                     _startListening();
                   }
@@ -280,25 +383,44 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                 child: AnimatedBuilder(
                   animation: _pulseAnim,
                   builder: (context, child) {
+                    // ขนาด pulse ตาม RMS level ของเสียง
+                    final rmsScale = _isListening
+                        ? 1.0 + (_rmsLevel.clamp(0, 10) / 10.0) * 0.5
+                        : _pulseAnim.value;
+
                     return Stack(
                       alignment: Alignment.center,
                       children: [
-                        Container(
-                          width: 100 * _pulseAnim.value,
-                          height: 100 * _pulseAnim.value,
+                        // วงแหวนด้านนอก — สะท้อนระดับเสียง
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 100),
+                          width: 100 * rmsScale,
+                          height: 100 * rmsScale,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: const Color(
-                              0xFFF15A24,
-                            ).withValues(alpha: 0.15),
+                            color: const Color(0xFFF15A24)
+                                .withValues(alpha: _isListening ? 0.2 : 0.1),
                           ),
                         ),
+                        // ปุ่มไมค์หลัก
                         Container(
                           width: 80,
                           height: 80,
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Color(0xFFF15A24),
+                            color: _isListening
+                                ? const Color(0xFFF15A24)
+                                : const Color(0xFF333333),
+                            boxShadow: _isListening
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFF15A24)
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 20,
+                                      spreadRadius: 2,
+                                    ),
+                                  ]
+                                : null,
                           ),
                           child: Icon(
                             _isListening ? Icons.mic : Icons.mic_none,
@@ -311,12 +433,12 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                   },
                 ),
               ),
-            const SizedBox(height: 30),
-            if (_errorMessage.isEmpty)
+              const SizedBox(height: 24),
               Text(
-                l10n.voiceTapToStop,
-                style: const TextStyle(color: Colors.grey),
+                _isListening ? l10n.voiceTapToStop : 'แตะเพื่อพูดอีกครั้ง',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
               ),
+            ],
             const Spacer(flex: 2),
           ],
         ),
