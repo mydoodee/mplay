@@ -400,62 +400,64 @@ class TabletSongCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           // Title & Meta Info below Thumbnail
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        song.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isPlaying ? const Color(0xFFF15A24) : Colors.white,
-                          fontSize: 14,
-                          fontWeight: isPlaying ? FontWeight.w700 : FontWeight.w600,
-                          height: 1.3,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          song.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isPlaying ? const Color(0xFFF15A24) : Colors.white,
+                            fontSize: 14,
+                            fontWeight: isPlaying ? FontWeight.w700 : FontWeight.w600,
+                            height: 1.3,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        song.artist,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF888888),
-                          fontSize: 12,
+                        const SizedBox(height: 3),
+                        Text(
+                          song.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF888888),
+                            fontSize: 12,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 1),
-                      Text(
-                        song.isLive ? 'Live Stream' : 'YouTube Music',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF555555),
-                          fontSize: 11,
+                        const SizedBox(height: 1),
+                        Text(
+                          song.isLive ? 'Live Stream' : 'YouTube Music',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF555555),
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => _showSongMenu(context),
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 4, top: 2),
-                    child: Icon(
-                      Icons.more_vert_rounded,
-                      color: Color(0xFF888888),
-                      size: 20,
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  GestureDetector(
+                    onTap: () => _showSongMenu(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 4, top: 2),
+                      child: Icon(
+                        Icons.more_vert_rounded,
+                        color: Color(0xFF888888),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],

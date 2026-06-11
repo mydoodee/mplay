@@ -407,12 +407,26 @@ class SongProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addSongToPlaylist(int playlistId, Song song) async {
+  Future<bool> addSongToPlaylist(int playlistId, Song song) async {
     try {
-      await _dbHelper.addSongToPlaylist(playlistId, song);
-      await _loadPlaylists();
+      // ตรวจสอบในแรมก่อนว่าเพลงนี้เคยอยู่ในเพลย์ลิสต์นี้แล้วหรือยัง
+      final playlistIndex = _playlists.indexWhere((p) => p.id == playlistId);
+      if (playlistIndex != -1) {
+        final exists = _playlists[playlistIndex].songs.any((s) => s.id == song.id);
+        if (exists) {
+          return false;
+        }
+      }
+
+      final res = await _dbHelper.addSongToPlaylist(playlistId, song);
+      if (res > 0) {
+        await _loadPlaylists();
+        return true;
+      }
+      return false;
     } catch (e) {
       if (kDebugMode) print('Error adding song to playlist: $e');
+      return false;
     }
   }
 

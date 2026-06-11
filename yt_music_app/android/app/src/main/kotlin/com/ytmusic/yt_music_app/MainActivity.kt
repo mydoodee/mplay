@@ -58,16 +58,6 @@ class MainActivity : AudioServiceActivity() {
      * speech recognizer service ใดๆ ก็ได้ (ไม่จำเป็นต้องเป็น Google app)
      */
     private fun startInProcessRecognition(locale: String, result: MethodChannel.Result) {
-        // เช็คว่ามี recognizer พร้อมใช้งานไหม
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            result.error(
-                "NO_RECOGNIZER",
-                "ไม่พบบริการรู้จำเสียงบนอุปกรณ์นี้",
-                null
-            )
-            return
-        }
-
         // ถ้ามี pending result จากครั้งก่อน ให้ cancel ก่อน
         pendingResult?.error("CANCELLED", "New request started", null)
         pendingResult = result
@@ -75,8 +65,27 @@ class MainActivity : AudioServiceActivity() {
         // ทำลาย recognizer เดิมถ้ามี
         speechRecognizer?.destroy()
 
-        // สร้าง SpeechRecognizer ใหม่
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        // ลอง default recognizer ก่อน (network-based, ใช้ได้กับจอรถที่มี Google services)
+        // ถ้าไม่ได้ค่อย fallback ไป on-device recognizer (Android 12+)
+        speechRecognizer = try {
+            SpeechRecognizer.createSpeechRecognizer(this)
+        } catch (e: Exception) {
+            // fallback ลอง on-device recognizer (Android 12+)
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                } else {
+                    pendingResult = null
+                    result.error("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
+                    return
+                }
+            } catch (e2: Exception) {
+                pendingResult = null
+                result.error("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
+                return
+            }
+        }
+
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 runOnUiThread {
