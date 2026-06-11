@@ -11,13 +11,13 @@ class Song {
   final String? filePath;
   final Uint8List? coverArtBytes;
 
-  // Always returns a valid YouTube thumbnail URL (16:9, for lists)
+  // Always returns a valid YouTube thumbnail URL (for lists — hqdefault = 480×360)
   String get thumbnailUrl {
     if (isLocal) return '';
     if (thumbnail.isNotEmpty && thumbnail != 'NA' && thumbnail.startsWith('http')) {
       return thumbnail;
     }
-    return 'https://i.ytimg.com/vi/$id/mqdefault.jpg';
+    return 'https://i.ytimg.com/vi/$id/hqdefault.jpg';
   }
 
   // High-quality thumbnail for player screen (hqdefault = 480×360)

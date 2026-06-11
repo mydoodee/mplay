@@ -9,6 +9,16 @@ import 'services/song_provider.dart';
 import 'services/equalizer_provider.dart';
 import 'screens/splash_screen.dart';
 
+/// Bypass SSL certificate errors on devices with incorrect system time
+/// (common on car head units and emulators running Android 12-14).
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 // Global audio handler (nullable to prevent LateInitializationError)
 MyAudioHandler? audioHandler;
 // Global EQ provider — set after audioHandler is ready in SplashScreen
@@ -16,6 +26,9 @@ EqualizerProvider? equalizerProvider;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Fix SSL certificate issues on car head units / emulators
+  HttpOverrides.global = MyHttpOverrides();
 
   // Init sqflite for desktop platforms (fast, local only)
   if (Platform.isWindows || Platform.isLinux) {

@@ -95,26 +95,27 @@ class PlaylistUtils {
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF252525),
                                     borderRadius: BorderRadius.circular(8),
-                                    image:
-                                        playlist.songs.isNotEmpty &&
-                                            playlist.songs[0].thumbnail !=
-                                                "NA" &&
-                                            playlist
-                                                .songs[0]
-                                                .thumbnail
-                                                .isNotEmpty
-                                        ? DecorationImage(
-                                            image: CachedNetworkImageProvider(
-                                              playlist.songs[0].thumbnail,
-                                            ),
-                                            fit: BoxFit.cover,
-                                          )
+                                    image: playlist.songs.isNotEmpty
+                                        ? (playlist.songs[0].isLocal
+                                            ? (playlist.songs[0].coverArtBytes != null
+                                                ? DecorationImage(
+                                                    image: MemoryImage(
+                                                      playlist.songs[0].coverArtBytes!,
+                                                    ),
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                : null)
+                                            : DecorationImage(
+                                                image: CachedNetworkImageProvider(
+                                                  playlist.songs[0].thumbnailUrl,
+                                                ),
+                                                fit: BoxFit.cover,
+                                              ))
                                         : null,
                                   ),
-                                  child:
-                                      (playlist.songs.isEmpty ||
-                                          playlist.songs[0].thumbnail == "NA" ||
-                                          playlist.songs[0].thumbnail.isEmpty)
+                                  child: (playlist.songs.isEmpty ||
+                                          (playlist.songs[0].isLocal &&
+                                              playlist.songs[0].coverArtBytes == null))
                                       ? const Center(
                                           child: Icon(
                                             Icons.queue_music_rounded,
@@ -137,23 +138,32 @@ class PlaylistUtils {
                                     fontSize: 12,
                                   ),
                                 ),
-                                onTap: () async {
+                                 onTap: () async {
                                   Navigator.pop(ctx);
-                                  await provider.addSongToPlaylist(
+                                  final success = await provider.addSongToPlaylist(
                                     playlist.id,
                                     song,
                                   );
                                   
                                   if (context.mounted) {
+                                    final isThai = Localizations.localeOf(context).languageCode == 'th';
+                                    final message = success
+                                        ? AppLocalizations.of(context)!.addedToPlaylist(playlist.name)
+                                        : (isThai
+                                            ? 'เพลงนี้อยู่ในเพลย์ลิสต์ "${playlist.name}" อยู่แล้ว'
+                                            : 'This song is already in playlist "${playlist.name}"');
+                                    
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
                                         content: Text(
-                                          AppLocalizations.of(context)!.addedToPlaylist(playlist.name),
+                                          message,
                                           style: const TextStyle(
                                             color: Colors.white,
                                           ),
                                         ),
-                                        backgroundColor: const Color(0xFFF15A24),
+                                        backgroundColor: success
+                                            ? const Color(0xFFF15A24)
+                                            : const Color(0xFF444444),
                                         duration: const Duration(seconds: 2),
                                         behavior: SnackBarBehavior.floating,
                                         shape: RoundedRectangleBorder(

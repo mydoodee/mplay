@@ -8,6 +8,7 @@ import '../models/song.dart';
 import '../models/playlist.dart';
 import 'api_service.dart';
 import 'local_music_service.dart';
+import 'playback_state_service.dart';
 import '../database/db_helper.dart';
 import '../main.dart'; // To access audioHandler
 
@@ -44,6 +45,9 @@ class SongProvider with ChangeNotifier {
 
   List<Song> _history = [];
   List<Song> get history => _history;
+  bool _isHistoryLoaded = false;
+  bool get isHistoryLoaded => _isHistoryLoaded;
+  String? _lastHistorySavedSongId;
 
   // Local Music State
   final List<Song> _localSongs = [];
@@ -57,7 +61,8 @@ class SongProvider with ChangeNotifier {
 
   // Download State
   final Map<String, double> _downloadProgress = {}; // videoId → 0.0-1.0
-  Map<String, double> get downloadProgress => Map.unmodifiable(_downloadProgress);
+  Map<String, double> get downloadProgress =>
+      Map.unmodifiable(_downloadProgress);
   final Set<String> _downloadingIds = {};
 
   SongProvider() {
@@ -68,12 +73,18 @@ class SongProvider with ChangeNotifier {
       _loadHistory();
       _loadLocalSongs();
       _initAudioListener();
+      _loadLastPlaybackState();
     });
   }
 
-  void _initAudioListener() {
+  void _initAudioListener() async {
+    // Wait for audioHandler to be initialized
+    while (audioHandler == null) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
     // Sync current song with audio handler
-    audioHandler?.mediaItem.listen((item) async {
+    audioHandler!.mediaItem.listen((item) async {
       if (item != null && item.id.isNotEmpty) {
         final isLocal = item.extras?['isLocal'] == true;
         final filePath = item.extras?['filePath'] as String?;
@@ -90,21 +101,63 @@ class SongProvider with ChangeNotifier {
           }
         }
 
+        final playedSong = Song(
+          id: item.id,
+          title: item.title,
+          artist: item.artist ?? '',
+          thumbnail: item.artUri?.toString() ?? '',
+          duration: item.duration?.inSeconds ?? 0,
+          isLocal: isLocal,
+          filePath: filePath,
+          coverArtBytes: coverArtBytes,
+        );
+
         Future.microtask(() {
-          _currentSong = Song(
-            id: item.id,
-            title: item.title,
-            artist: item.artist ?? '',
-            thumbnail: item.artUri?.toString() ?? '',
-            duration: item.duration?.inSeconds ?? 0,
-            isLocal: isLocal,
-            filePath: filePath,
-            coverArtBytes: coverArtBytes,
-          );
+          _currentSong = playedSong;
           notifyListeners();
         });
+
+        // 🚀 บันทึกประวัติการเล่นเพลงอัตโนมัติเมื่อเริ่มเล่นเพลงใหม่ (รองรับการข้ามเพลงและเล่นออโต้)
+        if (_lastHistorySavedSongId != item.id) {
+          _lastHistorySavedSongId = item.id;
+          _dbHelper.addToHistory(playedSong).then((_) {
+            _loadHistory();
+          });
+        }
       }
     });
+  }
+
+  Future<void> _loadLastPlaybackState() async {
+    // Wait for audioHandler to be initialized
+    while (audioHandler == null) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    try {
+      final savedState = await PlaybackStateService.loadPlaybackState();
+      if (savedState != null) {
+        final Song song = savedState['song'] as Song;
+        final int positionSec = savedState['position'] as int;
+        final List<Song> queueSongs = savedState['queue'] as List<Song>;
+        final int queueIndex = savedState['queueIndex'] as int;
+
+        if (queueSongs.isNotEmpty) {
+          if (kDebugMode) {
+            print('⏮️ Restoring saved playback state: song=${song.title}, position=${positionSec}s');
+          }
+          await audioHandler!.restoreQueue(
+            queueSongs,
+            initialIndex: queueIndex,
+            position: Duration(seconds: positionSec),
+          );
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ SongProvider: Error restoring playback state: $e');
+      }
+    }
   }
 
   Future<void> search(String query) async {
@@ -203,18 +256,6 @@ class SongProvider with ChangeNotifier {
       } else {
         await audioHandler?.playSong(song);
       }
-
-      // 🚀 อัปเดต history ใน DB แบบ background
-      // แต่ถ้าเพลงนี้มีอยู่ใน list แล้ว ให้คงลำดับเดิมไว้ ไม่ reload ใหม่
-      // เพื่อไม่ให้เพลงที่เล่นเด้งขึ้นบนสุด
-      _dbHelper.addToHistory(song).then((_) {
-        final alreadyInHistory = _history.any((s) => s.id == song.id);
-        if (!alreadyInHistory) {
-          // เพลงใหม่ที่ไม่เคยเล่นมาก่อน → reload เพื่อเพิ่มขึ้นบนสุด
-          _loadHistory();
-        }
-        // เพลงที่มีอยู่แล้ว → ไม่ต้อง reload เพราะ isPlaying จะอัปเดตผ่าน audioHandler listener อยู่แล้ว
-      });
     } catch (e) {
       if (kDebugMode) {
         print('DB/Audio Error in playSong: $e');
@@ -224,17 +265,6 @@ class SongProvider with ChangeNotifier {
 
   Future<void> playAll(List<Song> songs, {int initialIndex = 0}) async {
     await audioHandler?.setQueue(songs, initialIndex: initialIndex);
-
-    // 🚀 บันทึกประวัติเฉพาะเพลงที่เล่นจริง (ไม่บันทึกทั้ง queue เพื่อประหยัด DB I/O)
-    Future.microtask(() async {
-      if (songs.isNotEmpty && initialIndex < songs.length) {
-        await _dbHelper.addToHistory(songs[initialIndex]);
-        final alreadyInHistory = _history.any((s) => s.id == songs[initialIndex].id);
-        if (!alreadyInHistory) {
-          await _loadHistory();
-        }
-      }
-    });
   }
 
   Future<void> shuffleAll(List<Song> songs) async {
@@ -270,18 +300,24 @@ class SongProvider with ChangeNotifier {
     try {
       final rawHistory = await _dbHelper.getHistory();
       final validHistory = <Song>[];
+      final seenIds = <String>{};
       for (final song in rawHistory) {
         if (song.id.startsWith('local_') &&
             (song.filePath == null || song.filePath!.isEmpty)) {
           await _dbHelper.removeFromHistory(song.id);
         } else {
-          validHistory.add(await _withCoverArt(song));
+          if (!seenIds.contains(song.id)) {
+            seenIds.add(song.id);
+            validHistory.add(await _withCoverArt(song));
+          }
         }
       }
       _history = validHistory;
-      notifyListeners();
     } catch (e) {
       if (kDebugMode) print('Error loading history: $e');
+    } finally {
+      _isHistoryLoaded = true;
+      notifyListeners();
     }
   }
 
@@ -371,12 +407,26 @@ class SongProvider with ChangeNotifier {
     }
   }
 
-  Future<void> addSongToPlaylist(int playlistId, Song song) async {
+  Future<bool> addSongToPlaylist(int playlistId, Song song) async {
     try {
-      await _dbHelper.addSongToPlaylist(playlistId, song);
-      await _loadPlaylists();
+      // ตรวจสอบในแรมก่อนว่าเพลงนี้เคยอยู่ในเพลย์ลิสต์นี้แล้วหรือยัง
+      final playlistIndex = _playlists.indexWhere((p) => p.id == playlistId);
+      if (playlistIndex != -1) {
+        final exists = _playlists[playlistIndex].songs.any((s) => s.id == song.id);
+        if (exists) {
+          return false;
+        }
+      }
+
+      final res = await _dbHelper.addSongToPlaylist(playlistId, song);
+      if (res > 0) {
+        await _loadPlaylists();
+        return true;
+      }
+      return false;
     } catch (e) {
       if (kDebugMode) print('Error adding song to playlist: $e');
+      return false;
     }
   }
 
@@ -472,6 +522,7 @@ class SongProvider with ChangeNotifier {
   Future<void> clearHistory() async {
     await _dbHelper.clearHistory();
     _history.clear();
+    _lastHistorySavedSongId = null;
     notifyListeners();
   }
 
@@ -479,6 +530,9 @@ class SongProvider with ChangeNotifier {
   Future<void> removeFromHistory(Song song) async {
     await _dbHelper.removeFromHistory(song.id);
     _history.removeWhere((s) => s.id == song.id);
+    if (_lastHistorySavedSongId == song.id) {
+      _lastHistorySavedSongId = null;
+    }
     notifyListeners();
   }
 
@@ -486,8 +540,9 @@ class SongProvider with ChangeNotifier {
 
   /// ตรวจสอบว่าเพลงนี้ download แล้วหรือยัง
   bool isDownloaded(String videoId) {
-    return _localSongs.any((s) =>
-        s.filePath != null && s.filePath!.contains(videoId));
+    return _localSongs.any(
+      (s) => s.filePath != null && s.filePath!.contains(videoId),
+    );
   }
 
   /// ตรวจสอบว่ากำลัง download อยู่หรือไม่

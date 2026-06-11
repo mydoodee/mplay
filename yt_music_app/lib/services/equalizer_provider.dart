@@ -196,14 +196,23 @@ class EqualizerProvider extends ChangeNotifier {
   /// Recompute the target hardware gains from the current UI band values.
   void _updateTargets() {
     final targetBands = _isEqualizerEnabled
-        ? _bandValues
+        ? List<double>.from(_bandValues)
         : List.filled(_bandValues.length, 0.0);
+
+    // Bass boost: เพิ่ม gain ที่ band ต่ำ (40Hz และ 150Hz) โดยตรง
+    // ดีกว่า LoudnessEnhancer เพราะ boost เฉพาะย่าน low freq ไม่ใช่ทุก freq
+    if (_isEqualizerEnabled && _bassBoosterLevel > 0) {
+      final bassDb = (_bassBoosterLevel / 100.0) * 8.0; // max 8 dB
+      targetBands[0] = (targetBands[0] + bassDb).clamp(-10.0, 10.0);        // 40Hz: full
+      targetBands[1] = (targetBands[1] + bassDb * 0.5).clamp(-10.0, 10.0);  // 150Hz: half
+    }
 
     final hwGains = _antiClip(_mapToHardwareBands(targetBands));
     _targetHwGains = hwGains.map(_safeGain).toList();
 
-    final targetBass = _isEqualizerEnabled ? _bassBoosterLevel : 0.0;
-    _targetBassDb = targetBass / 100.0 * 5.0; // Reduced max from 10.0 to 5.0 dB to prevent clipping/distortion
+    // LoudnessEnhancer ปิดใช้งาน — bass boost ย้ายมาใช้ EQ bands แล้ว
+    // (ไม่ boost ทุก freq อีกต่อไป ป้องกันเสียงแตก)
+    _targetBassDb = 0.0;
   }
 
   Future<void> _applyNow() async {
@@ -260,7 +269,10 @@ class EqualizerProvider extends ChangeNotifier {
         await eq.setEnabled(true);
         await loudness.setEnabled(true);
         _effectsInitialized = true;
-      } catch (_) {}
+        debugPrint('✅ EQ & LoudnessEnhancer initialized successfully');
+      } catch (e) {
+        debugPrint('❌ EQ effects init failed: $e');
+      }
     }
 
     if (!_hwRangeQueried) {
@@ -309,12 +321,14 @@ class EqualizerProvider extends ChangeNotifier {
   double _safeGain(double gain) => gain.clamp(_hwMinGain, _hwMaxGain);
 
   List<double> _antiClip(List<double> gains) {
-    double maxBoost = 0.0;
-    for (final g in gains) {
-      if (g > maxBoost) maxBoost = g;
-    }
-    if (maxBoost > 0.0) {
-      return gains.map((g) => g - maxBoost).toList();
+    // Proportional scaling: ถ้า gain ใด gain หนึ่งเกิน hardware ceiling
+    // ให้ scale ลงตามสัดส่วน → รักษา EQ shape ไว้ไม่เพี้ยน
+    // (เดิม: ลบ maxBoost ออกจากทุก band → shape เพี้ยน เสียงหมองลง)
+    final double ceiling = _hwMaxGain;
+    final double maxGain = gains.fold(0.0, (m, g) => g > m ? g : m);
+    if (maxGain > ceiling && ceiling > 0) {
+      final scale = ceiling / maxGain;
+      return gains.map((g) => g * scale).toList();
     }
     return gains;
   }
