@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
@@ -12,11 +13,13 @@ import com.ryanheise.audioservice.AudioServiceActivity
 
 class MainActivity : AudioServiceActivity() {
 
+    private val TAG = "MPlaySpeech"
     private val CHANNEL = "com.ytmusic.yt_music_app/speech"
     private val EVENT_CHANNEL = "com.ytmusic.yt_music_app/speech_events"
     private var pendingResult: MethodChannel.Result? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var eventSink: EventChannel.EventSink? = null
+    private var isRecognizerListening = false
 
     /**
      * ส่งผลลัพธ์กลับ Flutter อย่างปลอดภัย — ป้องกัน "Reply already submitted" crash
@@ -28,7 +31,7 @@ class MainActivity : AudioServiceActivity() {
         try {
             res?.success(value)
         } catch (e: Exception) {
-            // Reply already submitted — ignore safely
+            Log.w(TAG, "safeSuccess: Reply already submitted", e)
         }
     }
 
@@ -38,7 +41,29 @@ class MainActivity : AudioServiceActivity() {
         try {
             res?.error(code, message, details)
         } catch (e: Exception) {
-            // Reply already submitted — ignore safely
+            Log.w(TAG, "safeError: Reply already submitted", e)
+        }
+    }
+
+    /**
+     * ทำลาย SpeechRecognizer อย่างปลอดภัย — ป้องกัน "Service not registered" crash
+     * ต้อง cancel() ก่อน destroy() เสมอ และครอบด้วย try-catch
+     */
+    private fun safeDestroyRecognizer() {
+        val recognizer = speechRecognizer
+        speechRecognizer = null
+        isRecognizerListening = false
+        if (recognizer != null) {
+            try {
+                recognizer.cancel()
+            } catch (e: Exception) {
+                Log.w(TAG, "safeDestroyRecognizer: cancel() failed", e)
+            }
+            try {
+                recognizer.destroy()
+            } catch (e: Exception) {
+                Log.w(TAG, "safeDestroyRecognizer: destroy() failed (Service not registered?)", e)
+            }
         }
     }
 
@@ -86,14 +111,15 @@ class MainActivity : AudioServiceActivity() {
         safeError("CANCELLED", "New request started", null)
         pendingResult = result
 
-        // ทำลาย recognizer เดิมถ้ามี
-        speechRecognizer?.destroy()
+        // ทำลาย recognizer เดิมถ้ามี — ใช้ safe method ป้องกัน crash
+        safeDestroyRecognizer()
 
         // ลอง default recognizer ก่อน (network-based, ใช้ได้กับจอรถที่มี Google services)
         // ถ้าไม่ได้ค่อย fallback ไป on-device recognizer (Android 12+)
         speechRecognizer = try {
             SpeechRecognizer.createSpeechRecognizer(this)
         } catch (e: Exception) {
+            Log.w(TAG, "Default recognizer failed, trying on-device", e)
             // fallback ลอง on-device recognizer (Android 12+)
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -103,6 +129,7 @@ class MainActivity : AudioServiceActivity() {
                     return
                 }
             } catch (e2: Exception) {
+                Log.e(TAG, "On-device recognizer also failed", e2)
                 safeError("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
                 return
             }
@@ -111,6 +138,7 @@ class MainActivity : AudioServiceActivity() {
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
                 runOnUiThread {
+                    isRecognizerListening = true
                     eventSink?.success(mapOf("event" to "ready"))
                 }
             }
@@ -131,12 +159,14 @@ class MainActivity : AudioServiceActivity() {
 
             override fun onEndOfSpeech() {
                 runOnUiThread {
+                    isRecognizerListening = false
                     eventSink?.success(mapOf("event" to "speechEnd"))
                 }
             }
 
             override fun onError(error: Int) {
                 runOnUiThread {
+                    isRecognizerListening = false
                     val errorMsg = when (error) {
                         SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
                         SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
@@ -150,6 +180,7 @@ class MainActivity : AudioServiceActivity() {
                         else -> "UNKNOWN_ERROR"
                     }
 
+                    Log.d(TAG, "onError: $errorMsg (code=$error)")
                     eventSink?.success(mapOf("event" to "error", "code" to errorMsg))
 
                     // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
@@ -164,6 +195,7 @@ class MainActivity : AudioServiceActivity() {
 
             override fun onResults(results: Bundle?) {
                 runOnUiThread {
+                    isRecognizerListening = false
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull() ?: ""
 
@@ -208,18 +240,22 @@ class MainActivity : AudioServiceActivity() {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
 
-        speechRecognizer?.startListening(intent)
+        try {
+            speechRecognizer?.startListening(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "startListening failed", e)
+            safeError("NO_RECOGNIZER", "ไม่สามารถเริ่มฟังเสียงได้: ${e.message}", null)
+            safeDestroyRecognizer()
+        }
     }
 
     private fun stopRecognition() {
-        speechRecognizer?.stopListening()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        safeDestroyRecognizer()
         safeSuccess(null)
     }
 
     override fun onDestroy() {
-        speechRecognizer?.destroy()
+        safeDestroyRecognizer()
         super.onDestroy()
     }
 }
