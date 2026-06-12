@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart';
-import '../l10n/app_localizations.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/native_speech_service.dart';
 
 class VoiceSearchDialog extends StatefulWidget {
   final String initialLocale;
@@ -12,11 +14,17 @@ class VoiceSearchDialog extends StatefulWidget {
 
 class _VoiceSearchDialogState extends State<VoiceSearchDialog>
     with SingleTickerProviderStateMixin {
-  final SpeechToText _stt = SpeechToText();
   bool _isListening = false;
   String _recognizedWords = '';
+  String _partialWords = '';
+  String _errorMessage = '';
+  bool _showTextInput = false; // true = แสดงช่องพิมพ์ค้นหาแทน
+  double _rmsLevel = 0.0;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
+  StreamSubscription? _eventSub;
+  final TextEditingController _textController = TextEditingController();
+  final FocusNode _textFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -26,7 +34,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
       duration: const Duration(milliseconds: 1000),
     )..repeat(reverse: true);
 
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.4).animate(
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
@@ -34,123 +42,594 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   }
 
   Future<void> _initAndStart() async {
-    bool available = await _stt.initialize(
-      onStatus: (status) {
-        if (status == 'notListening') {
-          if (mounted && _recognizedWords.isNotEmpty) {
-            Navigator.pop(context, _recognizedWords);
-          }
+    // ขอ permission ไมค์ก่อน
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = widget.initialLocale.startsWith('th')
+                ? 'จำเป็นต้องอนุญาตสิทธิ์การใช้ไมโครโฟน'
+                : 'Microphone permission is required.';
+          });
         }
-      },
-    );
-
-    if (available) {
-      _startListening();
+        return;
+      }
     }
+
+    _startListening();
   }
 
-  void _startListening() async {
+  void _startListening() {
     setState(() {
       _isListening = true;
       _recognizedWords = '';
+      _partialWords = '';
+      _errorMessage = '';
     });
 
-    await _stt.listen(
-      onResult: (result) {
-        setState(() {
-          _recognizedWords = result.recognizedWords;
-        });
-        if (result.finalResult && result.recognizedWords.isNotEmpty) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) Navigator.pop(context, result.recognizedWords);
+    // Subscribe to speech events
+    _eventSub?.cancel();
+    _eventSub = NativeSpeechService.events.listen((event) {
+      if (!mounted) return;
+      final eventType = event['event'] as String?;
+
+      switch (eventType) {
+        case 'partialResult':
+          setState(() {
+            _partialWords = event['text'] as String? ?? '';
           });
-        }
-      },
-      localeId: widget.initialLocale,
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 5),
-    );
+          break;
+        case 'finalResult':
+          final text = event['text'] as String? ?? '';
+          if (text.isNotEmpty) {
+            setState(() {
+              _recognizedWords = text;
+            });
+          }
+          break;
+        case 'rms':
+          final value = event['value'];
+          if (value is num) {
+            setState(() {
+              _rmsLevel = value.toDouble().clamp(-2.0, 10.0);
+            });
+          }
+          break;
+        case 'error':
+          final code = event['code'] as String? ?? '';
+          setState(() {
+            _isListening = false;
+            _errorMessage = _getFriendlyError(code);
+          });
+          break;
+        case 'speechEnd':
+          setState(() => _isListening = false);
+          break;
+      }
+    });
+
+    // เริ่ม recognize
+    NativeSpeechService.recognize(locale: widget.initialLocale)
+        .then((result) {
+          if (!mounted) return;
+          if (result != null && result.isNotEmpty) {
+            // สำเร็จ! ส่งผลลัพธ์กลับไป ค้นหาทันที
+            Navigator.pop(context, result);
+          } else {
+            // ไม่มีผลลัพธ์ แต่ไม่มี error รุนแรง (เช่น ผู้ใช้อาจจะกดยกเลิกเอง)
+            setState(() {
+              _isListening = false;
+            });
+          }
+        })
+        .catchError((e) {
+          if (!mounted) return;
+          String errStr = e.toString();
+          if (e is PlatformException) {
+            errStr = e.code;
+            if (e.message != null && e.message!.isNotEmpty) {
+              errStr = '${e.code}: ${e.message}';
+            }
+          }
+          setState(() {
+            _isListening = false;
+            _errorMessage = _getFriendlyError(errStr);
+          });
+        });
+  }
+
+  String _getFriendlyError(String code) {
+    if (code.contains('NO_RECOGNIZER')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'อุปกรณ์นี้ไม่มีระบบค้นหาด้วยเสียง กรุณาพิมพ์ค้นหาแทน'
+          : 'Voice search is not available on this device. Please type to search.';
+    }
+    if (code.contains('PERMISSION_ERROR') ||
+        code.contains('INSUFFICIENT_PERMISSIONS')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'กรุณาอนุญาตสิทธิ์การเข้าถึงไมโครโฟนในการตั้งค่าระบบ'
+          : 'Please grant microphone access in system settings.';
+    }
+    if (code.contains('NETWORK_ERROR') ||
+        code.contains('NETWORK_TIMEOUT') ||
+        code.contains('SERVER_ERROR')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'การเชื่อมต่อเครือข่ายขัดข้อง กรุณาตรวจสอบอินเทอร์เน็ต'
+          : 'Network connection error. Please check your internet connection.';
+    }
+    if (code.contains('AUDIO_ERROR')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'ระบบบันทึกเสียงขัดข้อง กรุณาลองใหม่อีกครั้ง'
+          : 'Microphone recording error. Please try again.';
+    }
+    if (code.contains('CLIENT_ERROR')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'บริการค้นหาด้วยเสียงของระบบขัดข้อง กรุณาพิมพ์ค้นหาแทน'
+          : 'System voice search service error. Please type to search.';
+    }
+    if (code.contains('RECOGNIZER_BUSY')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'ระบบค้นหาด้วยเสียงกำลังทำงานอื่นอยู่ กรุณาลองใหม่'
+          : 'Voice recognition is busy. Please try again.';
+    }
+    if (code.contains('NO_MATCH') || code.contains('SPEECH_TIMEOUT')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'ตรวจไม่พบเสียงพูดของคุณ กรุณาลองใหม่อีกครั้ง'
+          : 'No speech recognized. Please try again.';
+    }
+    if (code.contains('UNKNOWN_ERROR')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'อุปกรณ์นี้ไม่รองรับบริการค้นหาด้วยเสียง หรือระบบบริการขัดข้อง'
+          : 'Voice search is not supported on this device, or service is unavailable.';
+    }
+    return widget.initialLocale.startsWith('th')
+        ? 'ไม่สามารถใช้การค้นหาด้วยเสียงได้ ($code)'
+        : 'Voice search failed ($code)';
+  }
+
+  void _retryListening() {
+    setState(() {
+      _showTextInput = false;
+      _errorMessage = '';
+    });
+    _startListening();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    _stt.stop();
+    _eventSub?.cancel();
+    _textController.dispose();
+    _textFocusNode.dispose();
+    NativeSpeechService.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    
+    final displayText = _recognizedWords.isNotEmpty
+        ? _recognizedWords
+        : (_partialWords.isNotEmpty ? _partialWords : '');
+
     return Scaffold(
-      backgroundColor: Colors.black.withValues(alpha: 0.9),
+      backgroundColor: const Color(
+        0xFFE5DCE3,
+      ), // สีชมพูอมม่วงสว่าง เลียนแบบ YouTube ในรูป
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                onPressed: () => Navigator.pop(context),
+            // ── Header Row ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // ปุ่มปิด (X)
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Color(0xFF505050),
+                      size: 28,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+
+                  // Pill toggle เสียง / เพลง เลียนแบบ YouTube
+                  if (!_showTextInput)
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDCD2DA),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFD0C4CE)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.mic_rounded,
+                                  color: Color(0xFFE52116),
+                                  size: 16,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'เสียง',
+                                  style: TextStyle(
+                                    color: Color(0xFF202020),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    widget.initialLocale.startsWith('th')
+                                        ? 'ระบบค้นหาด้วยทำนองเพลงจะพร้อมใช้งานในเวอร์ชันถัดไป'
+                                        : 'Hum-to-search feature will be available in the next version.',
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
+                              ),
+                              color: Colors.transparent,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.music_note_rounded,
+                                    color: const Color(0xFF707070),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'เพลง',
+                                    style: TextStyle(
+                                      color: const Color(0xFF707070),
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    const SizedBox(width: 100), // จัดความสมดุลหน้าจอ
+                  // ปุ่มขวา: ปุ่มตั้งค่า หรือ ปุ่มไมค์ (เพื่อสลับกลับมาโหมดเสียงเมื่ออยู่ในโหมดคีย์บอร์ด)
+                  if (_showTextInput)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.mic_rounded,
+                        color: Color(0xFF505050),
+                        size: 26,
+                      ),
+                      onPressed: () {
+                        _retryListening();
+                      },
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(
+                        Icons.settings_outlined,
+                        color: Color(0xFF505050),
+                        size: 24,
+                      ),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              widget.initialLocale.startsWith('th')
+                                  ? 'การตั้งค่าระบบค้นหาด้วยเสียง'
+                                  : 'Voice search settings',
+                            ),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
             const Spacer(),
-            Text(
-              _recognizedWords.isEmpty ? l10n.voiceListening : _recognizedWords,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _recognizedWords.isEmpty ? Colors.grey : Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 50),
-            GestureDetector(
-              onTap: () {
-                if (_isListening) {
-                  _stt.stop();
-                } else {
-                  _startListening();
-                }
-              },
-              child: AnimatedBuilder(
-                animation: _pulseAnim,
-                builder: (context, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Container(
-                        width: 100 * _pulseAnim.value,
-                        height: 100 * _pulseAnim.value,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFFF15A24).withValues(alpha: 0.15),
+
+            // ── Content area ──
+            if (_showTextInput) ...[
+              // ── โหมดพิมพ์ค้นหา (ปรับปรุงให้เป็นธีมสว่างพรีเมียมเข้ากัน) ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.keyboard_rounded,
+                      color: Color(0xFF606060),
+                      size: 40,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.initialLocale.startsWith('th')
+                          ? 'พิมพ์เพื่อค้นหาเพลง'
+                          : 'Type to search songs',
+                      style: const TextStyle(
+                        color: Color(0xFF606060),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: const Color(0xFFE52116).withValues(alpha: 0.3),
+                          width: 1.5,
                         ),
                       ),
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color(0xFFF15A24),
+                      child: TextField(
+                        controller: _textController,
+                        focusNode: _textFocusNode,
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(
+                          color: Color(0xFF202020),
+                          fontSize: 18,
                         ),
-                        child: Icon(
-                          _isListening ? Icons.mic : Icons.mic_none,
-                          color: Colors.white,
-                          size: 40,
+                        decoration: InputDecoration(
+                          hintText: widget.initialLocale.startsWith('th')
+                              ? 'พิมพ์ชื่อเพลง...'
+                              : 'Type song name...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF909090),
+                            fontSize: 16,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 16,
+                          ),
+                          border: InputBorder.none,
+                          suffixIcon: IconButton(
+                            icon: const Icon(
+                              Icons.search_rounded,
+                              color: Color(0xFFE52116),
+                              size: 26,
+                            ),
+                            onPressed: () {
+                              final text = _textController.text.trim();
+                              if (text.isNotEmpty) {
+                                Navigator.pop(context, text);
+                              }
+                            },
+                          ),
+                        ),
+                        onSubmitted: (text) {
+                          final trimmed = text.trim();
+                          if (trimmed.isNotEmpty) {
+                            Navigator.pop(context, trimmed);
+                          }
+                        },
+                      ),
+                    ),
+                    if (_errorMessage.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFD32F2F),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
-                  );
+                  ],
+                ),
+              ),
+            ] else ...[
+              // ── โหมดฟังเสียง เลียนแบบ YouTube ──
+              Padding(
+                padding: const EdgeInsets.only(left: 48, right: 48, bottom: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isListening
+                            ? (widget.initialLocale.startsWith('th')
+                                  ? 'กำลังฟัง...'
+                                  : 'Listening...')
+                            : (_errorMessage.isNotEmpty
+                                  ? (widget.initialLocale.startsWith('th')
+                                        ? 'เกิดข้อผิดพลาด'
+                                        : 'Voice Search Error')
+                                  : (widget.initialLocale.startsWith('th')
+                                        ? 'แตะเพื่อพูด'
+                                        : 'Tap to speak')),
+                        style: TextStyle(
+                          color: _errorMessage.isNotEmpty
+                              ? const Color(0xFFD32F2F)
+                              : const Color(0xFF1F1F1F),
+                          fontSize: 34,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      if (displayText.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          displayText,
+                          style: const TextStyle(
+                            color: Color(0xFF1F1F1F),
+                            fontSize: 24,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ] else if (_errorMessage.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _errorMessage,
+                          style: const TextStyle(
+                            color: Color(0xFF606060),
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
+
+              // ปุ่มไมค์สีแดง พร้อม ripple rings ด้านนอก
+              Center(
+                child: AnimatedBuilder(
+                  animation: _pulseAnim,
+                  builder: (context, child) {
+                    final rmsScale = _isListening
+                        ? 1.0 + (_rmsLevel.clamp(0.0, 10.0) / 10.0) * 0.4
+                        : 1.0;
+                    final pulseVal = _pulseAnim.value;
+
+                    final scale1 = pulseVal * rmsScale;
+                    final scale2 = (1.0 + (pulseVal - 1.0) * 1.8) * rmsScale;
+
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Ripple วงนอกสุด
+                        if (_isListening)
+                          Container(
+                            width: 100 * scale2,
+                            height: 100 * scale2,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(
+                                0xFFE52116,
+                              ).withValues(alpha: 0.05),
+                            ),
+                          ),
+                        // Ripple วงใน
+                        if (_isListening)
+                          Container(
+                            width: 100 * scale1,
+                            height: 100 * scale1,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(
+                                0xFFE52116,
+                              ).withValues(alpha: 0.1),
+                            ),
+                          ),
+                        // พื้นหลังสีขาว
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                        ),
+                        // ปุ่มไมโครโฟนสีแดง (YouTube Style)
+                        GestureDetector(
+                          onTap: () {
+                            if (_isListening) {
+                              NativeSpeechService.stop();
+                              setState(() => _isListening = false);
+                            } else {
+                              _startListening();
+                            }
+                          },
+                          child: Container(
+                            width: 82,
+                            height: 82,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFFE52116),
+                            ),
+                            child: const Icon(
+                              Icons.mic_rounded,
+                              color: Colors.white,
+                              size: 44,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ปุ่มคีย์บอร์ดด้านล่าง เพื่อให้สลับไปพิมพ์ได้
+              IconButton(
+                icon: const Icon(
+                  Icons.keyboard_rounded,
+                  color: Color(0xFF606060),
+                  size: 30,
+                ),
+                onPressed: () {
+                  setState(() => _showTextInput = true);
+                  Future.delayed(const Duration(milliseconds: 300), () {
+                    if (mounted) _textFocusNode.requestFocus();
+                  });
                 },
               ),
-            ),
-            const SizedBox(height: 30),
-            Text(
-              l10n.voiceTapToStop, // หรือข้อความอื่นๆ เช่น "Tap to speak"
-              style: const TextStyle(color: Colors.grey),
-            ),
+              const SizedBox(height: 8),
+
+              Text(
+                _isListening
+                    ? (widget.initialLocale.startsWith('th')
+                          ? 'แตะไมค์เพื่อหยุด'
+                          : 'Tap mic to stop')
+                    : (widget.initialLocale.startsWith('th')
+                          ? 'แตะไมค์เพื่อพูดอีกครั้ง'
+                          : 'Tap mic to speak again'),
+                style: const TextStyle(color: Color(0xFF707070), fontSize: 13),
+              ),
+            ],
             const Spacer(flex: 2),
           ],
         ),

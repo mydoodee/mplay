@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
 
 enum VoiceState { idle, listening, processing }
@@ -48,22 +49,45 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
   }
 
   Future<void> _initSpeech() async {
-    _sttAvailable = await _stt.initialize(
-      onError: (error) => _onError(error.errorMsg),
-      onStatus: (status) {
-        if (status == 'done' || status == 'notListening') {
-          _onListenDone();
-        }
-      },
-    );
+    try {
+      _sttAvailable = await _stt.initialize(
+        onError: (error) => _onError(error.errorMsg),
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            _onListenDone();
+          }
+        },
+      );
+    } catch (e) {
+      _sttAvailable = false;
+    }
     if (mounted) setState(() {});
   }
 
   Future<void> _startListening() async {
-    if (!_sttAvailable) {
-      _showUnavailableSnack();
-      return;
+    final localeStr = Localizations.localeOf(context).toString();
+
+    var status = await Permission.microphone.status;
+    if (!status.isGranted) {
+      status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        _showUnavailableSnack();
+        return;
+      }
+      await _initSpeech();
     }
+
+    if (!mounted) return;
+
+    if (!_sttAvailable) {
+      await _initSpeech();
+      if (!_sttAvailable) {
+        _showUnavailableSnack();
+        return;
+      }
+    }
+
+    if (!mounted) return;
 
     widget.onListenStart?.call();
 
@@ -81,13 +105,15 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
           _finishWithResult(result.recognizedWords);
         }
       },
-      listenFor: const Duration(seconds: 20),  // รอนานขึ้น (จาก 10 → 20 วิ)
-      pauseFor: const Duration(seconds: 4),    // รอเงียบนานขึ้น (จาก 2 → 4 วิ) เพื่อภาษาไทย
-      localeId: Localizations.localeOf(context).toString(),
+      listenFor: const Duration(seconds: 20), // รอนานขึ้น (จาก 10 → 20 วิ)
+      pauseFor: const Duration(
+        seconds: 4,
+      ), // รอเงียบนานขึ้น (จาก 2 → 4 วิ) เพื่อภาษาไทย
+      localeId: localeStr,
       listenOptions: SpeechListenOptions(
         partialResults: true,
-        cancelOnError: false,               // ไม่ตัดทันทีเมื่อ error — ให้ลองใหม่ได้
-        listenMode: ListenMode.search,      // โหมด search เหมาะกับชื่อเพลง/ศิลปิน
+        cancelOnError: false, // ไม่ตัดทันทีเมื่อ error — ให้ลองใหม่ได้
+        listenMode: ListenMode.search, // โหมด search เหมาะกับชื่อเพลง/ศิลปิน
       ),
     );
   }
@@ -123,9 +149,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
     setState(() => _state = VoiceState.idle);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          AppLocalizations.of(context)!.voiceNoSound(error),
-        ),
+        content: Text(AppLocalizations.of(context)!.voiceNoSound(error)),
         backgroundColor: const Color(0xFF2A2A2A),
         duration: const Duration(seconds: 2),
       ),
@@ -194,8 +218,8 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
                   color: isListening
                       ? const Color(0xFFF15A24)
                       : isProcessing
-                          ? const Color(0xFFF15A24).withValues(alpha: 0.6)
-                          : Colors.transparent,
+                      ? const Color(0xFFF15A24).withValues(alpha: 0.6)
+                      : Colors.transparent,
                 ),
                 child: Center(
                   child: isProcessing
@@ -208,9 +232,7 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
                           ),
                         )
                       : Icon(
-                          isListening
-                              ? Icons.stop_rounded
-                              : Icons.mic_rounded,
+                          isListening ? Icons.stop_rounded : Icons.mic_rounded,
                           color: isListening
                               ? Colors.white
                               : const Color(0xFF888888),
