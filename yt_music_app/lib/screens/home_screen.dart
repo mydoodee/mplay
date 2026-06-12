@@ -134,6 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    // เมื่อกลับมาหน้าแรก (tab 0) ให้ล้างผลค้นหาเก่าออก
+    // แสดงเฉพาะ history (เพลงที่กดเล่น) เท่านั้น
+    if (index == 0) {
+      final songProvider = Provider.of<SongProvider>(context, listen: false);
+      if (songProvider.searchResults.isNotEmpty) {
+        _searchController.clear();
+        songProvider.clearSearch();
+      }
+    }
   }
 
   @override

@@ -18,6 +18,30 @@ class MainActivity : AudioServiceActivity() {
     private var speechRecognizer: SpeechRecognizer? = null
     private var eventSink: EventChannel.EventSink? = null
 
+    /**
+     * ส่งผลลัพธ์กลับ Flutter อย่างปลอดภัย — ป้องกัน "Reply already submitted" crash
+     * โดย atomically null pendingResult ก่อนเรียก success/error
+     */
+    private fun safeSuccess(value: Any?) {
+        val res = pendingResult
+        pendingResult = null
+        try {
+            res?.success(value)
+        } catch (e: Exception) {
+            // Reply already submitted — ignore safely
+        }
+    }
+
+    private fun safeError(code: String, message: String?, details: Any?) {
+        val res = pendingResult
+        pendingResult = null
+        try {
+            res?.error(code, message, details)
+        } catch (e: Exception) {
+            // Reply already submitted — ignore safely
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -59,7 +83,7 @@ class MainActivity : AudioServiceActivity() {
      */
     private fun startInProcessRecognition(locale: String, result: MethodChannel.Result) {
         // ถ้ามี pending result จากครั้งก่อน ให้ cancel ก่อน
-        pendingResult?.error("CANCELLED", "New request started", null)
+        safeError("CANCELLED", "New request started", null)
         pendingResult = result
 
         // ทำลาย recognizer เดิมถ้ามี
@@ -75,13 +99,11 @@ class MainActivity : AudioServiceActivity() {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                     SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
                 } else {
-                    pendingResult = null
-                    result.error("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
+                    safeError("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
                     return
                 }
             } catch (e2: Exception) {
-                pendingResult = null
-                result.error("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
+                safeError("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
                 return
             }
         }
@@ -115,9 +137,6 @@ class MainActivity : AudioServiceActivity() {
 
             override fun onError(error: Int) {
                 runOnUiThread {
-                    val res = pendingResult
-                    pendingResult = null
-
                     val errorMsg = when (error) {
                         SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
                         SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
@@ -136,9 +155,9 @@ class MainActivity : AudioServiceActivity() {
                     // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
                     if (error == SpeechRecognizer.ERROR_NO_MATCH ||
                         error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                        res?.success(null)
+                        safeSuccess(null)
                     } else {
-                        res?.error("SPEECH_ERROR", errorMsg, null)
+                        safeError("SPEECH_ERROR", errorMsg, null)
                     }
                 }
             }
@@ -153,12 +172,10 @@ class MainActivity : AudioServiceActivity() {
                         "text" to text
                     ))
 
-                    val res = pendingResult
-                    pendingResult = null
                     if (text.isNotEmpty()) {
-                        res?.success(text)
+                        safeSuccess(text)
                     } else {
-                        res?.success(null)
+                        safeSuccess(null)
                     }
                 }
             }
@@ -198,8 +215,7 @@ class MainActivity : AudioServiceActivity() {
         speechRecognizer?.stopListening()
         speechRecognizer?.destroy()
         speechRecognizer = null
-        pendingResult?.success(null)
-        pendingResult = null
+        safeSuccess(null)
     }
 
     override fun onDestroy() {

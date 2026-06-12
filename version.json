@@ -1,6 +1,6 @@
 {
-  "latest_version": "1.0.1.73",
-  "build_number": 73,
-  "download_url": "https://music.growkub.com/mplay-1.0.1.73.apk",
-  "release_notes": "เล่นต่อหลังจากเปิดเครื่องใหม่ ปรับไมค์ "
+  "latest_version": "1.0.1.74",
+  "build_number": 74,
+  "download_url": "https://music.growkub.com/mplay-1.0.1.74.apk",
+  "release_notes": "แก้ไขไมค์ Reply already submitted, ล้างผลค้นหาเก่าเมื่อกลับหน้าแรก"
 }
