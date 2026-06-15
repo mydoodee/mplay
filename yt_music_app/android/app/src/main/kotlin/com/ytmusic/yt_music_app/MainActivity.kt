@@ -18,8 +18,21 @@ class MainActivity : AudioServiceActivity() {
     private val EVENT_CHANNEL = "com.ytmusic.yt_music_app/speech_events"
     private var pendingResult: MethodChannel.Result? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var eventSink: EventChannel.EventSink? = null
+    @Volatile private var eventSink: EventChannel.EventSink? = null
     private var isRecognizerListening = false
+
+    /**
+     * ส่ง event กลับ Flutter อย่างปลอดภัย — ป้องกัน NullPointerException เมื่อ eventSink ยังไม่พร้อม
+     */
+    private fun safeSendEvent(data: Map<String, Any>) {
+        runOnUiThread {
+            try {
+                eventSink?.success(data)
+            } catch (e: Exception) {
+                Log.w(TAG, "safeSendEvent: failed to send event", e)
+            }
+        }
+    }
 
     /**
      * ส่งผลลัพธ์กลับ Flutter อย่างปลอดภัย — ป้องกัน "Reply already submitted" crash
@@ -137,53 +150,48 @@ class MainActivity : AudioServiceActivity() {
 
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                runOnUiThread {
-                    isRecognizerListening = true
-                    eventSink?.success(mapOf("event" to "ready"))
-                }
+                isRecognizerListening = true
+                Log.d(TAG, "onReadyForSpeech")
+                safeSendEvent(mapOf("event" to "ready"))
             }
 
             override fun onBeginningOfSpeech() {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "speechStart"))
-                }
+                Log.d(TAG, "onBeginningOfSpeech")
+                safeSendEvent(mapOf("event" to "speechStart"))
             }
 
             override fun onRmsChanged(rmsdB: Float) {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "rms", "value" to rmsdB))
-                }
+                safeSendEvent(mapOf("event" to "rms", "value" to rmsdB))
             }
 
             override fun onBufferReceived(buffer: ByteArray?) {}
 
             override fun onEndOfSpeech() {
-                runOnUiThread {
-                    isRecognizerListening = false
-                    eventSink?.success(mapOf("event" to "speechEnd"))
-                }
+                isRecognizerListening = false
+                Log.d(TAG, "onEndOfSpeech")
+                safeSendEvent(mapOf("event" to "speechEnd"))
             }
 
             override fun onError(error: Int) {
+                isRecognizerListening = false
+                val errorMsg = when (error) {
+                    SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
+                    SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "PERMISSION_ERROR"
+                    SpeechRecognizer.ERROR_NETWORK -> "NETWORK_ERROR"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
+                    SpeechRecognizer.ERROR_SERVER -> "SERVER_ERROR"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
+                    else -> "UNKNOWN_ERROR"
+                }
+
+                Log.d(TAG, "onError: $errorMsg (code=$error)")
+                safeSendEvent(mapOf("event" to "error", "code" to errorMsg))
+
+                // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
                 runOnUiThread {
-                    isRecognizerListening = false
-                    val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
-                        SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "PERMISSION_ERROR"
-                        SpeechRecognizer.ERROR_NETWORK -> "NETWORK_ERROR"
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
-                        SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
-                        SpeechRecognizer.ERROR_SERVER -> "SERVER_ERROR"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
-                        else -> "UNKNOWN_ERROR"
-                    }
-
-                    Log.d(TAG, "onError: $errorMsg (code=$error)")
-                    eventSink?.success(mapOf("event" to "error", "code" to errorMsg))
-
-                    // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
                     if (error == SpeechRecognizer.ERROR_NO_MATCH ||
                         error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
                         safeSuccess(null)
@@ -194,16 +202,17 @@ class MainActivity : AudioServiceActivity() {
             }
 
             override fun onResults(results: Bundle?) {
+                isRecognizerListening = false
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull() ?: ""
+
+                Log.d(TAG, "onResults: text='$text'")
+                safeSendEvent(mapOf(
+                    "event" to "finalResult",
+                    "text" to text
+                ))
+
                 runOnUiThread {
-                    isRecognizerListening = false
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull() ?: ""
-
-                    eventSink?.success(mapOf(
-                        "event" to "finalResult",
-                        "text" to text
-                    ))
-
                     if (text.isNotEmpty()) {
                         safeSuccess(text)
                     } else {
@@ -213,15 +222,13 @@ class MainActivity : AudioServiceActivity() {
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                runOnUiThread {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull() ?: ""
-                    if (text.isNotEmpty()) {
-                        eventSink?.success(mapOf(
-                            "event" to "partialResult",
-                            "text" to text
-                        ))
-                    }
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull() ?: ""
+                if (text.isNotEmpty()) {
+                    safeSendEvent(mapOf(
+                        "event" to "partialResult",
+                        "text" to text
+                    ))
                 }
             }
 

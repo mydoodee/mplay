@@ -69,7 +69,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
       _errorMessage = '';
     });
 
-    // Subscribe to speech events
+    // Subscribe to speech events ก่อน
     _eventSub?.cancel();
     _eventSub = NativeSpeechService.events.listen((event) {
       if (!mounted) return;
@@ -110,7 +110,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
       }
     });
 
-    // เริ่ม recognize
+    // เริ่ม recognize (ensureEventChannelReady จะถูกเรียกภายใน recognize อัตโนมัติ)
     NativeSpeechService.recognize(locale: widget.initialLocale)
         .then((result) {
           if (!mounted) return;
