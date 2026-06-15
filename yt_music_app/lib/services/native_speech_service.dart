@@ -1,19 +1,44 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 
 /// Service ที่เรียก Android SpeechRecognizer API โดยตรง (in-process)
 /// ทำงานได้บนจอรถยนต์ที่ไม่มี Google app ตราบใดที่มี speech recognizer service ใดๆ
 class NativeSpeechService {
   static const _channel = MethodChannel('com.ytmusic.yt_music_app/speech');
-  static const _eventChannel =
-      EventChannel('com.ytmusic.yt_music_app/speech_events');
+  static const _eventChannel = EventChannel(
+    'com.ytmusic.yt_music_app/speech_events',
+  );
+
+  /// Cached broadcast stream — ป้องกันไม่ให้เรียก receiveBroadcastStream() ซ้ำ
+  /// ซึ่งจะทำให้ EventSink ฝั่ง native ถูกแทนที่ และ event หลุด
+  static Stream<Map<String, dynamic>>? _cachedEventStream;
 
   /// เช็คว่ามี speech recognizer พร้อมใช้งานบนอุปกรณ์นี้หรือไม่
   static Future<bool> isAvailable() async {
     try {
-      final result = await _channel.invokeMethod<bool>('checkRecognizerAvailable');
+      final result = await _channel.invokeMethod<bool>(
+        'checkRecognizerAvailable',
+      );
       return result ?? false;
     } on PlatformException {
       return false;
+    }
+  }
+
+  /// เตรียม EventChannel ให้พร้อมรับ events ก่อนเริ่ม recognition
+  /// ต้องเรียกก่อน recognize() เพื่อให้ eventSink ฝั่ง native ถูกตั้งค่า
+  static Future<void> ensureEventChannelReady() async {
+    if (_cachedEventStream == null) {
+      // สร้าง broadcast stream จาก EventChannel เพียงครั้งเดียว
+      _cachedEventStream = _eventChannel.receiveBroadcastStream().map((event) {
+        if (event is Map) {
+          return Map<String, dynamic>.from(event);
+        }
+        return <String, dynamic>{'event': 'unknown'};
+      }).asBroadcastStream();
+
+      // รอ 1 frame ให้ native side ตั้งค่า eventSink เสร็จ
+      await Future.delayed(const Duration(milliseconds: 100));
     }
   }
 
@@ -23,9 +48,10 @@ class NativeSpeechService {
   ///
   /// คืน String ที่รู้จำได้ หรือ null ถ้าผู้ใช้ยกเลิก/ไม่มีผลลัพธ์
   /// Throws PlatformException ถ้าไม่มี recognizer ติดตั้งอยู่
-  static Future<String?> recognize({
-    String locale = 'th-TH',
-  }) async {
+  static Future<String?> recognize({String locale = 'th-TH'}) async {
+    // ตรวจสอบว่า EventChannel พร้อมรับ events แล้ว
+    await ensureEventChannelReady();
+
     try {
       final result = await _channel.invokeMethod<String>(
         'startVoiceRecognition',
@@ -61,11 +87,12 @@ class NativeSpeechService {
   /// - "rms": ระดับเสียง (มี "value")
   /// - "error": เกิดข้อผิดพลาด (มี "code")
   static Stream<Map<String, dynamic>> get events {
-    return _eventChannel.receiveBroadcastStream().map((event) {
+    _cachedEventStream ??= _eventChannel.receiveBroadcastStream().map((event) {
       if (event is Map) {
         return Map<String, dynamic>.from(event);
       }
       return <String, dynamic>{'event': 'unknown'};
-    });
+    }).asBroadcastStream();
+    return _cachedEventStream!;
   }
 }

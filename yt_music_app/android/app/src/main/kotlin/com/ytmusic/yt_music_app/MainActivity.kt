@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
@@ -12,11 +13,26 @@ import com.ryanheise.audioservice.AudioServiceActivity
 
 class MainActivity : AudioServiceActivity() {
 
+    private val TAG = "MPlaySpeech"
     private val CHANNEL = "com.ytmusic.yt_music_app/speech"
     private val EVENT_CHANNEL = "com.ytmusic.yt_music_app/speech_events"
     private var pendingResult: MethodChannel.Result? = null
     private var speechRecognizer: SpeechRecognizer? = null
-    private var eventSink: EventChannel.EventSink? = null
+    @Volatile private var eventSink: EventChannel.EventSink? = null
+    private var isRecognizerListening = false
+
+    /**
+     * ส่ง event กลับ Flutter อย่างปลอดภัย — ป้องกัน NullPointerException เมื่อ eventSink ยังไม่พร้อม
+     */
+    private fun safeSendEvent(data: Map<String, Any>) {
+        runOnUiThread {
+            try {
+                eventSink?.success(data)
+            } catch (e: Exception) {
+                Log.w(TAG, "safeSendEvent: failed to send event", e)
+            }
+        }
+    }
 
     /**
      * ส่งผลลัพธ์กลับ Flutter อย่างปลอดภัย — ป้องกัน "Reply already submitted" crash
@@ -28,7 +44,7 @@ class MainActivity : AudioServiceActivity() {
         try {
             res?.success(value)
         } catch (e: Exception) {
-            // Reply already submitted — ignore safely
+            Log.w(TAG, "safeSuccess: Reply already submitted", e)
         }
     }
 
@@ -38,7 +54,29 @@ class MainActivity : AudioServiceActivity() {
         try {
             res?.error(code, message, details)
         } catch (e: Exception) {
-            // Reply already submitted — ignore safely
+            Log.w(TAG, "safeError: Reply already submitted", e)
+        }
+    }
+
+    /**
+     * ทำลาย SpeechRecognizer อย่างปลอดภัย — ป้องกัน "Service not registered" crash
+     * ต้อง cancel() ก่อน destroy() เสมอ และครอบด้วย try-catch
+     */
+    private fun safeDestroyRecognizer() {
+        val recognizer = speechRecognizer
+        speechRecognizer = null
+        isRecognizerListening = false
+        if (recognizer != null) {
+            try {
+                recognizer.cancel()
+            } catch (e: Exception) {
+                Log.w(TAG, "safeDestroyRecognizer: cancel() failed", e)
+            }
+            try {
+                recognizer.destroy()
+            } catch (e: Exception) {
+                Log.w(TAG, "safeDestroyRecognizer: destroy() failed (Service not registered?)", e)
+            }
         }
     }
 
@@ -86,14 +124,15 @@ class MainActivity : AudioServiceActivity() {
         safeError("CANCELLED", "New request started", null)
         pendingResult = result
 
-        // ทำลาย recognizer เดิมถ้ามี
-        speechRecognizer?.destroy()
+        // ทำลาย recognizer เดิมถ้ามี — ใช้ safe method ป้องกัน crash
+        safeDestroyRecognizer()
 
         // ลอง default recognizer ก่อน (network-based, ใช้ได้กับจอรถที่มี Google services)
         // ถ้าไม่ได้ค่อย fallback ไป on-device recognizer (Android 12+)
         speechRecognizer = try {
             SpeechRecognizer.createSpeechRecognizer(this)
         } catch (e: Exception) {
+            Log.w(TAG, "Default recognizer failed, trying on-device", e)
             // fallback ลอง on-device recognizer (Android 12+)
             try {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -103,6 +142,7 @@ class MainActivity : AudioServiceActivity() {
                     return
                 }
             } catch (e2: Exception) {
+                Log.e(TAG, "On-device recognizer also failed", e2)
                 safeError("NO_RECOGNIZER", "ไม่สามารถสร้าง SpeechRecognizer ได้", null)
                 return
             }
@@ -110,49 +150,48 @@ class MainActivity : AudioServiceActivity() {
 
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "ready"))
-                }
+                isRecognizerListening = true
+                Log.d(TAG, "onReadyForSpeech")
+                safeSendEvent(mapOf("event" to "ready"))
             }
 
             override fun onBeginningOfSpeech() {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "speechStart"))
-                }
+                Log.d(TAG, "onBeginningOfSpeech")
+                safeSendEvent(mapOf("event" to "speechStart"))
             }
 
             override fun onRmsChanged(rmsdB: Float) {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "rms", "value" to rmsdB))
-                }
+                safeSendEvent(mapOf("event" to "rms", "value" to rmsdB))
             }
 
             override fun onBufferReceived(buffer: ByteArray?) {}
 
             override fun onEndOfSpeech() {
-                runOnUiThread {
-                    eventSink?.success(mapOf("event" to "speechEnd"))
-                }
+                isRecognizerListening = false
+                Log.d(TAG, "onEndOfSpeech")
+                safeSendEvent(mapOf("event" to "speechEnd"))
             }
 
             override fun onError(error: Int) {
+                isRecognizerListening = false
+                val errorMsg = when (error) {
+                    SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
+                    SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "PERMISSION_ERROR"
+                    SpeechRecognizer.ERROR_NETWORK -> "NETWORK_ERROR"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
+                    SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
+                    SpeechRecognizer.ERROR_SERVER -> "SERVER_ERROR"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
+                    else -> "UNKNOWN_ERROR"
+                }
+
+                Log.d(TAG, "onError: $errorMsg (code=$error)")
+                safeSendEvent(mapOf("event" to "error", "code" to errorMsg))
+
+                // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
                 runOnUiThread {
-                    val errorMsg = when (error) {
-                        SpeechRecognizer.ERROR_AUDIO -> "AUDIO_ERROR"
-                        SpeechRecognizer.ERROR_CLIENT -> "CLIENT_ERROR"
-                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "PERMISSION_ERROR"
-                        SpeechRecognizer.ERROR_NETWORK -> "NETWORK_ERROR"
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "NETWORK_TIMEOUT"
-                        SpeechRecognizer.ERROR_NO_MATCH -> "NO_MATCH"
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RECOGNIZER_BUSY"
-                        SpeechRecognizer.ERROR_SERVER -> "SERVER_ERROR"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "SPEECH_TIMEOUT"
-                        else -> "UNKNOWN_ERROR"
-                    }
-
-                    eventSink?.success(mapOf("event" to "error", "code" to errorMsg))
-
-                    // NO_MATCH / SPEECH_TIMEOUT = ผู้ใช้ไม่ได้พูดอะไร → return null
                     if (error == SpeechRecognizer.ERROR_NO_MATCH ||
                         error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
                         safeSuccess(null)
@@ -163,15 +202,17 @@ class MainActivity : AudioServiceActivity() {
             }
 
             override fun onResults(results: Bundle?) {
+                isRecognizerListening = false
+                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull() ?: ""
+
+                Log.d(TAG, "onResults: text='$text'")
+                safeSendEvent(mapOf(
+                    "event" to "finalResult",
+                    "text" to text
+                ))
+
                 runOnUiThread {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull() ?: ""
-
-                    eventSink?.success(mapOf(
-                        "event" to "finalResult",
-                        "text" to text
-                    ))
-
                     if (text.isNotEmpty()) {
                         safeSuccess(text)
                     } else {
@@ -181,15 +222,13 @@ class MainActivity : AudioServiceActivity() {
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                runOnUiThread {
-                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    val text = matches?.firstOrNull() ?: ""
-                    if (text.isNotEmpty()) {
-                        eventSink?.success(mapOf(
-                            "event" to "partialResult",
-                            "text" to text
-                        ))
-                    }
+                val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull() ?: ""
+                if (text.isNotEmpty()) {
+                    safeSendEvent(mapOf(
+                        "event" to "partialResult",
+                        "text" to text
+                    ))
                 }
             }
 
@@ -208,18 +247,22 @@ class MainActivity : AudioServiceActivity() {
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
 
-        speechRecognizer?.startListening(intent)
+        try {
+            speechRecognizer?.startListening(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "startListening failed", e)
+            safeError("NO_RECOGNIZER", "ไม่สามารถเริ่มฟังเสียงได้: ${e.message}", null)
+            safeDestroyRecognizer()
+        }
     }
 
     private fun stopRecognition() {
-        speechRecognizer?.stopListening()
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+        safeDestroyRecognizer()
         safeSuccess(null)
     }
 
     override fun onDestroy() {
-        speechRecognizer?.destroy()
+        safeDestroyRecognizer()
         super.onDestroy()
     }
 }
