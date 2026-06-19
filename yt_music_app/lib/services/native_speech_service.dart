@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 
 /// Service ที่เรียก Android SpeechRecognizer API โดยตรง (in-process)
 /// ทำงานได้บนจอรถยนต์ที่ไม่มี Google app ตราบใดที่มี speech recognizer service ใดๆ
+///
+/// ปรับปรุง: เพิ่ม timeout safeguard ฝั่ง Dart
+/// กรณี native side ค้าง (ไม่ส่ง result กลับ) จะ timeout ใน 30 วินาที
 class NativeSpeechService {
   static const _channel = MethodChannel('com.ytmusic.yt_music_app/speech');
   static const _eventChannel = EventChannel(
@@ -48,6 +51,9 @@ class NativeSpeechService {
   ///
   /// คืน String ที่รู้จำได้ หรือ null ถ้าผู้ใช้ยกเลิก/ไม่มีผลลัพธ์
   /// Throws PlatformException ถ้าไม่มี recognizer ติดตั้งอยู่
+  ///
+  /// มี timeout 30 วินาที — ถ้า native side ค้างไม่ส่งผลลัพธ์กลับ
+  /// จะ return null แทนที่จะค้างตลอด
   static Future<String?> recognize({String locale = 'th-TH'}) async {
     // ตรวจสอบว่า EventChannel พร้อมรับ events แล้ว
     await ensureEventChannelReady();
@@ -56,6 +62,13 @@ class NativeSpeechService {
       final result = await _channel.invokeMethod<String>(
         'startVoiceRecognition',
         {'locale': locale},
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          // Native side ค้าง → หยุด recognizer แล้ว return null
+          stop();
+          return null;
+        },
       );
       return result;
     } on PlatformException catch (e) {

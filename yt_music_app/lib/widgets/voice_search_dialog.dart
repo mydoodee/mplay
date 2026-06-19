@@ -12,16 +12,14 @@ class VoiceSearchDialog extends StatefulWidget {
   State<VoiceSearchDialog> createState() => _VoiceSearchDialogState();
 }
 
-class _VoiceSearchDialogState extends State<VoiceSearchDialog>
-    with SingleTickerProviderStateMixin {
+class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
   bool _isListening = false;
   String _recognizedWords = '';
   String _partialWords = '';
   String _errorMessage = '';
   bool _showTextInput = false; // true = แสดงช่องพิมพ์ค้นหาแทน
-  double _rmsLevel = 0.0;
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
+  bool _activityLaunched = false; // true = Google Speech Dialog กำลังเปิดอยู่
+
   StreamSubscription? _eventSub;
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFocusNode = FocusNode();
@@ -29,33 +27,28 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
-
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
 
     _initAndStart();
   }
 
   Future<void> _initAndStart() async {
     // ขอ permission ไมค์ก่อน
-    var status = await Permission.microphone.status;
-    if (!status.isGranted) {
-      status = await Permission.microphone.request();
+    // บนอุปกรณ์รถยนต์ (head unit) permission อาจถูก grant ไว้แล้วโดยระบบ
+    // หรือไม่รองรับ runtime permission dialog — จึงต้อง handle ทั้งสองกรณี
+    try {
+      var status = await Permission.microphone.status;
       if (!status.isGranted) {
-        if (mounted) {
-          setState(() {
-            _errorMessage = widget.initialLocale.startsWith('th')
-                ? 'จำเป็นต้องอนุญาตสิทธิ์การใช้ไมโครโฟน'
-                : 'Microphone permission is required.';
-          });
+        status = await Permission.microphone.request();
+        if (!status.isGranted) {
+          // บน head unit บางรุ่น status อาจ report ผิด
+          // ลองเริ่มฟังเลยถ้า permission request ล้มเหลว
+          // SpeechRecognizer จะ report PERMISSION_ERROR เองถ้าไม่มี permission จริง
+          _startListening();
+          return;
         }
-        return;
       }
+    } catch (e) {
+      // permission_handler อาจ throw บน head unit บางรุ่น → ข้ามไปลองฟังเลย
     }
 
     _startListening();
@@ -67,6 +60,7 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
       _recognizedWords = '';
       _partialWords = '';
       _errorMessage = '';
+      _activityLaunched = false;
     });
 
     // Subscribe to speech events ก่อน
@@ -90,15 +84,25 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
           }
           break;
         case 'rms':
-          final value = event['value'];
-          if (value is num) {
-            setState(() {
-              _rmsLevel = value.toDouble().clamp(-2.0, 10.0);
-            });
-          }
+          // ไม่ใช้ rmsLevel แล้ว (เอา animation สั่นออก)
+          break;
+        case 'activityLaunched':
+          // Google Speech Dialog เปิดขึ้นแล้ว (Activity-based, แบบ YouTube)
+          // ซ่อน error เดิมและแสดงสถานะ
+          setState(() {
+            _activityLaunched = true;
+            _isListening = true;
+            _errorMessage = '';
+          });
           break;
         case 'error':
           final code = event['code'] as String? ?? '';
+          // ถ้าเป็น WATCHDOG_TIMEOUT ไม่ต้องแสดง error ทันที
+          // เพราะ native กำลัง fallback ไป recognizer อื่นอัตโนมัติ
+          if (code == 'WATCHDOG_TIMEOUT') {
+            // ไม่ต้องทำอะไร — native จะ fallback เอง
+            break;
+          }
           setState(() {
             _isListening = false;
             _errorMessage = _getFriendlyError(code);
@@ -179,6 +183,21 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
           ? 'ตรวจไม่พบเสียงพูดของคุณ กรุณาลองใหม่อีกครั้ง'
           : 'No speech recognized. Please try again.';
     }
+    if (code.contains('WATCHDOG_TIMEOUT')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'ระบบค้นหาด้วยเสียงไม่ตอบสนอง กรุณาลองใหม่หรือพิมพ์ค้นหาแทน'
+          : 'Voice search is not responding. Please try again or type to search.';
+    }
+    if (code.contains('LANGUAGE_UNAVAILABLE') || code.contains('LANGUAGE_NOT_SUPPORTED')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'อุปกรณ์นี้ไม่รองรับระบบสั่งงานด้วยเสียงในภาษาของคุณ กรุณาพิมพ์ค้นหาแทน'
+          : 'Search language is not supported on this device. Please type to search.';
+    }
+    if (code.contains('NO_SPEECH_ACTIVITY')) {
+      return widget.initialLocale.startsWith('th')
+          ? 'ไม่พบระบบค้นหาด้วยเสียงบนอุปกรณ์นี้ กรุณาพิมพ์ค้นหาแทน'
+          : 'No voice search service found on this device. Please type to search.';
+    }
     if (code.contains('UNKNOWN_ERROR')) {
       return widget.initialLocale.startsWith('th')
           ? 'อุปกรณ์นี้ไม่รองรับบริการค้นหาด้วยเสียง หรือระบบบริการขัดข้อง'
@@ -199,7 +218,6 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _eventSub?.cancel();
     _textController.dispose();
     _textFocusNode.dispose();
@@ -471,9 +489,13 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
                     children: [
                       Text(
                         _isListening
-                            ? (widget.initialLocale.startsWith('th')
-                                  ? 'กำลังฟัง...'
-                                  : 'Listening...')
+                            ? (_activityLaunched
+                                  ? (widget.initialLocale.startsWith('th')
+                                        ? 'กำลังเริ่มการค้นหาด้วยเสียง...'
+                                        : 'Starting voice search...')
+                                  : (widget.initialLocale.startsWith('th')
+                                        ? 'กำลังฟัง...'
+                                        : 'Listening...'))
                             : (_errorMessage.isNotEmpty
                                   ? (widget.initialLocale.startsWith('th')
                                         ? 'เกิดข้อผิดพลาด'
@@ -516,89 +538,78 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog>
               ),
               const SizedBox(height: 30),
 
-              // ปุ่มไมค์สีแดง พร้อม ripple rings ด้านนอก
+              // ปุ่มไมค์สีแดง — ไม่มี animation สั่น, ใช้ AnimatedOpacity แทน
               Center(
-                child: AnimatedBuilder(
-                  animation: _pulseAnim,
-                  builder: (context, child) {
-                    final rmsScale = _isListening
-                        ? 1.0 + (_rmsLevel.clamp(0.0, 10.0) / 10.0) * 0.4
-                        : 1.0;
-                    final pulseVal = _pulseAnim.value;
-
-                    final scale1 = pulseVal * rmsScale;
-                    final scale2 = (1.0 + (pulseVal - 1.0) * 1.8) * rmsScale;
-
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Ripple วงนอกสุด
-                        if (_isListening)
-                          Container(
-                            width: 100 * scale2,
-                            height: 100 * scale2,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(
-                                0xFFE52116,
-                              ).withValues(alpha: 0.05),
-                            ),
-                          ),
-                        // Ripple วงใน
-                        if (_isListening)
-                          Container(
-                            width: 100 * scale1,
-                            height: 100 * scale1,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(
-                                0xFFE52116,
-                              ).withValues(alpha: 0.1),
-                            ),
-                          ),
-                        // พื้นหลังสีขาว
-                        Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.06),
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // วงรอบนอก — แสดงเฉพาะตอนฟัง, ใช้ AnimatedOpacity แทน pulse
+                    AnimatedOpacity(
+                      opacity: _isListening ? 0.12 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        width: 130,
+                        height: 130,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFE52116),
                         ),
-                        // ปุ่มไมโครโฟนสีแดง (YouTube Style)
-                        GestureDetector(
-                          onTap: () {
-                            if (_isListening) {
-                              NativeSpeechService.stop();
-                              setState(() => _isListening = false);
-                            } else {
-                              _startListening();
-                            }
-                          },
-                          child: Container(
-                            width: 82,
-                            height: 82,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFFE52116),
-                            ),
-                            child: const Icon(
-                              Icons.mic_rounded,
-                              color: Colors.white,
-                              size: 44,
-                            ),
-                          ),
+                      ),
+                    ),
+                    // วงรอบใน — แสดงเฉพาะตอนฟัง
+                    AnimatedOpacity(
+                      opacity: _isListening ? 0.2 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: Container(
+                        width: 110,
+                        height: 110,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFE52116),
                         ),
-                      ],
-                    );
-                  },
+                      ),
+                    ),
+                    // พื้นหลังสีขาว
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // ปุ่มไมโครโฟนสีแดง (YouTube Style) — ไม่มี animation สั่น
+                    GestureDetector(
+                      onTap: () {
+                        if (_isListening) {
+                          NativeSpeechService.stop();
+                          setState(() => _isListening = false);
+                        } else {
+                          _startListening();
+                        }
+                      },
+                      child: Container(
+                        width: 82,
+                        height: 82,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFE52116),
+                        ),
+                        child: const Icon(
+                          Icons.mic_rounded,
+                          color: Colors.white,
+                          size: 44,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 24),
