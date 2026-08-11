@@ -1,7 +1,11 @@
 package com.ytmusic.yt_music_app
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.speech.RecognitionListener
@@ -38,6 +42,66 @@ class MainActivity : AudioServiceActivity() {
     // ── Track ว่า Activity-based ลองแล้วหรือยัง ──
     private var triedActivityApproach = false
 
+    // ── Audio Focus management ──
+    // บน head unit บางรุ่น SpeechRecognizer ไม่ได้ request audio focus เอง
+    // ทำให้เพลงยังเล่นอยู่ขณะไมค์ฟัง → ต้อง request เองเพื่อให้เพลง pause
+    private var audioManager: AudioManager? = null
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hadAudioFocus = false
+
+    // ─────────────────────────────────────────────────
+    //  Audio Focus helpers
+    // ─────────────────────────────────────────────────
+
+    /**
+     * Request AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE ก่อนเริ่ม speech recognition
+     * เพื่อบังคับให้ music player (just_audio / audio_service) pause
+     * บน head unit ที่ SpeechRecognizer ไม่ได้ request audio focus เอง
+     */
+    private fun requestAudioFocusForSpeech() {
+        try {
+            if (audioManager == null) {
+                audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            }
+
+            val attrs = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+
+            val focusReq = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                .setAudioAttributes(attrs)
+                .setAcceptsDelayedFocusGain(false)
+                .setWillPauseWhenDucked(true)
+                .build()
+
+            audioFocusRequest = focusReq
+            val result = audioManager?.requestAudioFocus(focusReq)
+            hadAudioFocus = (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
+            Log.d(TAG, "🔇 requestAudioFocus: result=$result, granted=$hadAudioFocus")
+        } catch (e: Exception) {
+            Log.w(TAG, "requestAudioFocusForSpeech failed (non-fatal)", e)
+        }
+    }
+
+    /**
+     * คืน audio focus กลับไปให้ music player เล่นต่อ
+     */
+    private fun abandonAudioFocusForSpeech() {
+        try {
+            val req = audioFocusRequest
+            if (req != null && hadAudioFocus) {
+                audioManager?.abandonAudioFocusRequest(req)
+                Log.d(TAG, "🔊 abandonAudioFocus: released")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "abandonAudioFocusForSpeech failed (non-fatal)", e)
+        } finally {
+            hadAudioFocus = false
+            audioFocusRequest = null
+        }
+    }
+
     // ─────────────────────────────────────────────────
     //  Safe helpers
     // ─────────────────────────────────────────────────
@@ -54,6 +118,7 @@ class MainActivity : AudioServiceActivity() {
 
     private fun safeSuccess(value: Any?) {
         cancelWatchdog()
+        abandonAudioFocusForSpeech() // คืน audio focus ให้เพลงเล่นต่อ
         val res = pendingResult
         pendingResult = null
         try {
@@ -65,6 +130,7 @@ class MainActivity : AudioServiceActivity() {
 
     private fun safeError(code: String, message: String?, details: Any?) {
         cancelWatchdog()
+        abandonAudioFocusForSpeech() // คืน audio focus ให้เพลงเล่นต่อ
         val res = pendingResult
         pendingResult = null
         try {
@@ -481,6 +547,10 @@ class MainActivity : AudioServiceActivity() {
         }
 
         try {
+            // 🔇 Request audio focus ก่อน startListening
+            // เพื่อบังคับให้เพลง pause บน head unit ที่ SpeechRecognizer ไม่ได้ request เอง
+            requestAudioFocusForSpeech()
+
             speechRecognizer?.startListening(intent)
             Log.d(TAG, "startListening() called (onDevice=$usingOnDeviceRecognizer, locale=$locale)")
 
@@ -510,6 +580,7 @@ class MainActivity : AudioServiceActivity() {
     override fun onDestroy() {
         cancelWatchdog()
         safeDestroyRecognizer()
+        abandonAudioFocusForSpeech()
         super.onDestroy()
     }
 }
