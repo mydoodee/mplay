@@ -89,5 +89,9 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- Required for Activity-based voice search (same approach as YouTube) -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
     </queries>
 </manifest>
