@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/native_speech_service.dart';
+import '../services/cloud_speech_service.dart';
 
 class VoiceSearchDialog extends StatefulWidget {
   final String initialLocale;
@@ -19,6 +20,9 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
   String _errorMessage = '';
   bool _showTextInput = false; // true = แสดงช่องพิมพ์ค้นหาแทน
   bool _activityLaunched = false; // true = Google Speech Dialog กำลังเปิดอยู่
+  bool _isCloudMode = false; // true = ใช้ Cloud STT บันทึกเสียงแล้วส่ง API
+  bool _isProcessingCloud = false; // true = กำลังส่งเสียงไปประมวลผลที่ API
+  Timer? _cloudAutoStopTimer;
 
   StreamSubscription? _eventSub;
   final TextEditingController _textController = TextEditingController();
@@ -49,6 +53,19 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
       }
     } catch (e) {
       // permission_handler อาจ throw บน head unit บางรุ่น → ข้ามไปลองฟังเลย
+    }
+
+    // ตรวจสอบก่อนว่ามี Native Speech Recognizer หรือไม่
+    try {
+      final available = await NativeSpeechService.isAvailable();
+      if (!available) {
+        // ไม่มี Google Speech บนเครื่อง → ใช้ Cloud STT แทนเลย
+        _startCloudListening();
+        return;
+      }
+    } catch (_) {
+      _startCloudListening();
+      return;
     }
 
     _startListening();
@@ -137,11 +154,80 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
               errStr = '${e.code}: ${e.message}';
             }
           }
+          if (errStr.contains('NO_RECOGNIZER') ||
+              errStr.contains('NO_SPEECH_ACTIVITY') ||
+              errStr.contains('UNKNOWN_ERROR')) {
+            // สลับไปใช้ Cloud STT อัตโนมัติถ้าไม่มี Native Recognizer บนอุปกรณ์นี้
+            _startCloudListening();
+            return;
+          }
           setState(() {
             _isListening = false;
             _errorMessage = _getFriendlyError(errStr);
           });
         });
+  }
+
+  /// ☁️ เริ่มบันทึกเสียงเพื่อส่งไปยัง Cloud Speech API
+  Future<void> _startCloudListening() async {
+    _cloudAutoStopTimer?.cancel();
+    setState(() {
+      _isListening = true;
+      _isCloudMode = true;
+      _isProcessingCloud = false;
+      _recognizedWords = '';
+      _partialWords = '';
+      _errorMessage = '';
+    });
+
+    final success = await CloudSpeechService.startRecording();
+    if (!mounted) return;
+
+    if (!success) {
+      setState(() {
+        _isListening = false;
+        _errorMessage = widget.initialLocale.startsWith('th')
+            ? 'ไม่สามารถเข้าถึงไมโครโฟนได้'
+            : 'Could not access microphone.';
+      });
+      return;
+    }
+
+    // ตั้งเวลาหยุดบันทึกอัตโนมัติ 5 วินาที
+    _cloudAutoStopTimer = Timer(const Duration(seconds: 5), () {
+      _stopCloudAndRecognize();
+    });
+  }
+
+  /// ☁️ หยุดบันทึกเสียงและส่งไปยัง Cloud Speech API
+  Future<void> _stopCloudAndRecognize() async {
+    _cloudAutoStopTimer?.cancel();
+    if (!_isCloudMode || _isProcessingCloud) return;
+
+    setState(() {
+      _isListening = false;
+      _isProcessingCloud = true;
+    });
+
+    final result = await CloudSpeechService.stopAndRecognize(
+      locale: widget.initialLocale,
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessingCloud = false;
+    });
+
+    if (result != null && result.isNotEmpty) {
+      Navigator.pop(context, result);
+    } else {
+      setState(() {
+        _errorMessage = widget.initialLocale.startsWith('th')
+            ? 'ตรวจไม่พบเสียงพูดของคุณ กรุณาลองใหม่อีกครั้ง'
+            : 'No speech recognized. Please try again.';
+      });
+    }
   }
 
   String _getFriendlyError(String code) {
@@ -213,15 +299,21 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
       _showTextInput = false;
       _errorMessage = '';
     });
-    _startListening();
+    if (_isCloudMode) {
+      _startCloudListening();
+    } else {
+      _startListening();
+    }
   }
 
   @override
   void dispose() {
+    _cloudAutoStopTimer?.cancel();
     _eventSub?.cancel();
     _textController.dispose();
     _textFocusNode.dispose();
     NativeSpeechService.stop();
+    CloudSpeechService.cancel();
     super.dispose();
   }
 
@@ -488,21 +580,25 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _isListening
-                            ? (_activityLaunched
-                                  ? (widget.initialLocale.startsWith('th')
-                                        ? 'กำลังเริ่มการค้นหาด้วยเสียง...'
-                                        : 'Starting voice search...')
-                                  : (widget.initialLocale.startsWith('th')
-                                        ? 'กำลังฟัง...'
-                                        : 'Listening...'))
-                            : (_errorMessage.isNotEmpty
-                                  ? (widget.initialLocale.startsWith('th')
-                                        ? 'เกิดข้อผิดพลาด'
-                                        : 'Voice Search Error')
-                                  : (widget.initialLocale.startsWith('th')
-                                        ? 'แตะเพื่อพูด'
-                                        : 'Tap to speak')),
+                        _isProcessingCloud
+                            ? (widget.initialLocale.startsWith('th')
+                                  ? 'กำลังแปลงเสียงพูด...'
+                                  : 'Processing speech...')
+                            : (_isListening
+                                  ? (_activityLaunched
+                                        ? (widget.initialLocale.startsWith('th')
+                                              ? 'กำลังเริ่มการค้นหาด้วยเสียง...'
+                                              : 'Starting voice search...')
+                                        : (widget.initialLocale.startsWith('th')
+                                              ? 'กำลังฟัง...'
+                                              : 'Listening...'))
+                                  : (_errorMessage.isNotEmpty
+                                        ? (widget.initialLocale.startsWith('th')
+                                              ? 'เกิดข้อผิดพลาด'
+                                              : 'Voice Search Error')
+                                        : (widget.initialLocale.startsWith('th')
+                                              ? 'แตะเพื่อพูด'
+                                              : 'Tap to speak'))),
                         style: TextStyle(
                           color: _errorMessage.isNotEmpty
                               ? const Color(0xFFD32F2F)
@@ -588,11 +684,20 @@ class _VoiceSearchDialogState extends State<VoiceSearchDialog> {
                     // ปุ่มไมโครโฟนสีแดง (YouTube Style) — ไม่มี animation สั่น
                     GestureDetector(
                       onTap: () {
+                        if (_isProcessingCloud) return;
                         if (_isListening) {
-                          NativeSpeechService.stop();
-                          setState(() => _isListening = false);
+                          if (_isCloudMode) {
+                            _stopCloudAndRecognize();
+                          } else {
+                            NativeSpeechService.stop();
+                            setState(() => _isListening = false);
+                          }
                         } else {
-                          _startListening();
+                          if (_isCloudMode) {
+                            _startCloudListening();
+                          } else {
+                            _startListening();
+                          }
                         }
                       },
                       child: Container(
