@@ -1,0 +1,21 @@
+{
+  "name": "yt-music-server",
+  "version": "2.0.0",
+  "description": "YouTube Music Streaming API Server",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "express-rate-limit": "^7.4.0",
+    "lru-cache": "^10.4.3",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

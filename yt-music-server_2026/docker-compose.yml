@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  yt-music-server:
+    build: .
+    container_name: yt-music-server
+    restart: unless-stopped
+    ports:
+      - "3456:3456"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3456
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3456/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - music-net
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      yt-music-server:
+        condition: service_healthy
+    networks:
+      - music-net
+
+networks:
+  music-net:
+    driver: bridge
