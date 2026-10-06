@@ -321,20 +321,19 @@ class MainActivity : AudioServiceActivity() {
     }
 
     // ─────────────────────────────────────────────────
-    //  In-process recognition (ลองก่อน Activity-based)
+    //  Recognition — Activity-based (YouTube style) เป็นตัวหลัก
     // ─────────────────────────────────────────────────
 
     /**
-     * กลยุทธ์ลำดับการลอง:
+     * กลยุทธ์ลำดับการลอง (ปรับใหม่ — YouTube style first):
      *
-     * Android 12+ (head unit):
-     *   1. on-device recognizer (ทำงานได้แม้ไม่มี Google app)
-     *   2. default recognizer (network-based, Google services)
-     *   3. Activity-based (เปิด Google Speech Dialog — แบบ YouTube) ← fallback สุดท้าย
+     *   1. Activity-based (เปิด Google Speech Dialog — เหมือน YouTube ใช้) ← ตัวหลัก
+     *   2. in-process recognizer (on-device / default) ← fallback
      *
-     * Android < 12:
-     *   1. default recognizer
-     *   2. Activity-based ← fallback สุดท้าย
+     * ข้อดีของ Activity-based:
+     *   - ใช้ UI ของ Google เอง (สวย, มี animation คลื่นเสียง)
+     *   - ไม่ต้องแปลงเสียงผ่าน server
+     *   - ทำงานได้บนทุกเครื่องที่ YouTube ค้นด้วยเสียงได้
      */
     private fun startInProcessRecognition(locale: String, result: MethodChannel.Result) {
         // ถ้ามี pending result จากครั้งก่อน ให้ cancel ก่อน
@@ -344,21 +343,34 @@ class MainActivity : AudioServiceActivity() {
 
         safeDestroyRecognizer()
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            // Android 12+ → ลอง on-device ก่อน (head unit มักไม่มี Google speech ที่ bind ได้)
-            val onDeviceAvailable = try {
-                SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
-            } catch (e: Exception) { false }
+        // เช็คว่ามี Activity สำหรับ speech recognition ไหม (เหมือน YouTube เช็ค)
+        val activityAvailable = try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            intent.resolveActivity(packageManager) != null
+        } catch (e: Exception) { false }
 
-            if (onDeviceAvailable) {
-                Log.d(TAG, "Android 12+ → trying on-device recognizer first")
-                startWithOnDeviceRecognizer(locale, result)
+        if (activityAvailable) {
+            // ✅ ใช้ Activity-based (YouTube style) เป็นตัวหลัก
+            Log.d(TAG, "🎤 Using Activity-based recognition (YouTube style) as primary")
+            tryActivityBasedRecognition(locale)
+        } else {
+            // Fallback → in-process recognizer
+            Log.d(TAG, "Activity-based not available → falling back to in-process recognizer")
+            triedActivityApproach = true // ข้ามไม่ต้อง fallback กลับมา Activity อีก
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val onDeviceAvailable = try {
+                    SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+                } catch (e: Exception) { false }
+
+                if (onDeviceAvailable) {
+                    startWithOnDeviceRecognizer(locale, result)
+                } else {
+                    startWithDefaultRecognizer(locale, result)
+                }
             } else {
-                Log.d(TAG, "Android 12+ but on-device not available → trying default")
                 startWithDefaultRecognizer(locale, result)
             }
-        } else {
-            startWithDefaultRecognizer(locale, result)
         }
     }
 
