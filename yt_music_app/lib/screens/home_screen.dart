@@ -18,6 +18,7 @@ import '../utils/responsive.dart';
 import 'equalizer_screen.dart';
 import 'admin_login_dialog.dart';
 import '../widgets/voice_search_dialog.dart';
+import '../main.dart' show audioHandler; // เพื่อ pause/resume เพลงขณะค้นด้วยเสียง
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
 import '../l10n/app_localizations.dart';
@@ -134,6 +135,15 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    // เมื่อกลับมาหน้าแรก (tab 0) ให้ล้างผลค้นหาเก่าออก
+    // แสดงเฉพาะ history (เพลงที่กดเล่น) เท่านั้น
+    if (index == 0) {
+      final songProvider = Provider.of<SongProvider>(context, listen: false);
+      if (songProvider.searchResults.isNotEmpty) {
+        _searchController.clear();
+        songProvider.clearSearch();
+      }
+    }
   }
 
   @override
@@ -480,6 +490,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           size: 22,
                         ),
                         onPressed: () async {
+                          // Pause เพลงก่อนเปิด mic เพื่อไม่ให้เสียงเพลงรบกวน (สำคัญมากบน head unit)
+                          final wasPlaying = audioHandler?.playbackState.value.playing ?? false;
+                          if (wasPlaying) {
+                            await audioHandler?.pause();
+                          }
+                          if (!mounted) return;
                           final result = await showGeneralDialog<String>(
                             context: context,
                             barrierDismissible: true,
@@ -490,6 +506,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ).toString(),
                             ),
                           );
+                          // Resume เพลงหลังปิด dialog (ถ้าก่อนหน้าเล่นอยู่)
+                          if (wasPlaying && (result == null || result.isEmpty)) {
+                            audioHandler?.play();
+                          }
                           if (result != null && result.isNotEmpty) {
                             _performSearch(result);
                           }
@@ -680,6 +700,12 @@ class _HomeScreenState extends State<HomeScreen> {
               size: 22,
             ),
             onPressed: () async {
+              // Pause เพลงก่อนเปิด mic เพื่อไม่ให้เสียงเพลงรบกวน (สำคัญมากบน head unit)
+              final wasPlaying = audioHandler?.playbackState.value.playing ?? false;
+              if (wasPlaying) {
+                await audioHandler?.pause();
+              }
+              if (!mounted) return;
               final result = await showGeneralDialog<String>(
                 context: context,
                 barrierDismissible: true,
@@ -688,6 +714,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   initialLocale: Localizations.localeOf(context).toString(),
                 ),
               );
+              // Resume เพลงหลังปิด dialog (ถ้าก่อนหน้าเล่นอยู่)
+              if (wasPlaying && (result == null || result.isEmpty)) {
+                audioHandler?.play();
+              }
               if (result != null && result.isNotEmpty) {
                 _performSearch(result);
               }

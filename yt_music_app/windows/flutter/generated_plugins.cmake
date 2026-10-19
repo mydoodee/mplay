@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_localization
   just_audio_windows
   permission_handler_windows
+  record_windows
   speech_to_text_windows
   sqlite3_flutter_libs
 )
