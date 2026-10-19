@@ -5,6 +5,7 @@ import '../widgets/app_logo.dart';
 import '../utils/playlist_utils.dart';
 import '../widgets/mini_equalizer.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
 
 class TabletSongCard extends StatelessWidget {
   final Song song;
@@ -270,6 +271,9 @@ class TabletSongCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onTapDown: (_) {
+        if (!song.isLocal) ApiService().prewarm([song.id]);
+      },
       borderRadius: BorderRadius.circular(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

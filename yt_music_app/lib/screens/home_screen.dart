@@ -24,6 +24,7 @@ import '../widgets/update_dialog.dart';
 import '../l10n/app_localizations.dart';
 import '../widgets/mini_equalizer.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -47,6 +48,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.addListener(_onScroll);
     _loadVersion();
     _checkForUpdates();
+    // 🚀 v82: Prewarm เพลงประวัติการเล่น 4 เพลงแรกทันทีที่เปิดแอป เพื่อให้กดเล่นได้ทันทีแบบ YouTube
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final songProvider = Provider.of<SongProvider>(context, listen: false);
+      if (songProvider.history.isNotEmpty) {
+        final topIds = songProvider.history
+            .take(4)
+            .map((s) => s.id)
+            .toList();
+        ApiService().prewarm(topIds);
+      }
+    });
   }
 
   Future<void> _checkForUpdates() async {
@@ -1022,6 +1034,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   (s) => s.id == song.id,
                                 ),
                               ),
+                              onTapDown: (_) {
+                                if (!song.isLocal) ApiService().prewarm([song.id]);
+                              },
                               child: Container(
                                 width: 150,
                                 margin: const EdgeInsets.only(right: 16),
@@ -1242,136 +1257,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return slivers;
   }
 
-  // ──────────────────────────────────────────────
-  //  YouTube Music style compact card (Tablet Recently Played)
-  // ──────────────────────────────────────────────
-  Widget _buildCompactSongCard(
-    Song song, {
-    required bool isPlaying,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        splashColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
-        child: Container(
-          decoration: BoxDecoration(
-            color: isPlaying
-                ? const Color(0xFFF15A24).withValues(alpha: 0.15)
-                : const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isPlaying
-                  ? const Color(0xFFF15A24).withValues(alpha: 0.5)
-                  : const Color(0xFF2A2A2A),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              // Square thumbnail
-              ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(7),
-                  bottomLeft: Radius.circular(7),
-                ),
-                child: song.isLocal
-                    ? (song.coverArtBytes != null
-                        ? Image.memory(
-                            song.coverArtBytes!,
-                            width: 62,
-                            height: 62,
-                            fit: BoxFit.cover,
-                          )
-                        : Container(
-                            width: 62,
-                            height: 62,
-                            color: const Color(0xFF2A2A2A),
-                            child: const Center(
-                              child: Icon(
-                                Icons.music_note_rounded,
-                                color: Color(0xFFF15A24),
-                                size: 20,
-                              ),
-                            ),
-                          ))
-                    : CachedNetworkImage(
-                        imageUrl: song.thumbnailUrl,
-                        width: 62,
-                        height: 62,
-                        fit: BoxFit.cover,
-                        placeholder: (_, _) => Container(
-                          width: 62,
-                          height: 62,
-                          color: const Color(0xFF2A2A2A),
-                        ),
-                        errorWidget: (_, _, _) => Container(
-                          width: 62,
-                          height: 62,
-                          color: const Color(0xFF2A2A2A),
-                          child: const Center(
-                            child: AppLogo(size: 18, showText: false),
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 10),
-              // Title + Artist
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        if (isPlaying)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 6),
-                            child: MiniEqualizer(
-                              color: Color(0xFFF15A24),
-                              size: 12,
-                            ),
-                          ),
-                        Expanded(
-                          child: Text(
-                            song.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: isPlaying
-                                  ? const Color(0xFFF15A24)
-                                  : Colors.white,
-                              fontSize: 13,
-                              fontWeight: isPlaying
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      song.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF888888),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildBottomNav() {
     final l10n = AppLocalizations.of(context)!;

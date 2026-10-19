@@ -196,4 +196,20 @@ class ApiService {
       return {};
     }
   }
+
+  /// 🚀 v82: Prewarm server cache for instant playback (fire-and-forget)
+  void prewarm(List<String> videoIds) {
+    try {
+      final ids = videoIds
+          .where((id) => !id.startsWith('local_') && id.isNotEmpty)
+          .take(10)
+          .toList();
+      if (ids.isEmpty) return;
+      _client.post(
+        Uri.parse(ApiConfig.prewarmUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'videoIds': ids}),
+      ).catchError((_) => http.Response('{}', 500));
+    } catch (_) {}
+  }
 }

@@ -6,6 +6,7 @@ import '../utils/playlist_utils.dart';
 import '../widgets/mini_equalizer.dart';
 import '../utils/responsive.dart';
 import '../l10n/app_localizations.dart';
+import '../services/api_service.dart';
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -275,6 +276,9 @@ class SongTile extends StatelessWidget {
 
     final tileContent = InkWell(
       onTap: onTap,
+      onTapDown: (_) {
+        if (!song.isLocal) ApiService().prewarm([song.id]);
+      },
       splashColor: const Color(0xFFF15A24).withValues(alpha: 0.1),
       highlightColor: const Color(0xFFF15A24).withValues(alpha: 0.05),
       borderRadius: isPlaying ? BorderRadius.circular(14) : null,

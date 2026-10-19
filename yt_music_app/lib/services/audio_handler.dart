@@ -40,7 +40,7 @@ class MyAudioHandler extends BaseAudioHandler {
           bufferForPlaybackDuration: const Duration(seconds: 1),
           bufferForPlaybackAfterRebufferDuration: const Duration(seconds: 2),
           targetBufferBytes:
-              1024 * 1024 * 10, // 10MB — ลดจาก 30MB เพื่อประหยัด RAM
+              1024 * 1024 * 10, // 10MB — ประหยัด RAM
         ),
         darwinLoadControl: DarwinLoadControl(
           preferredForwardBufferDuration: const Duration(minutes: 2),
@@ -461,20 +461,19 @@ class MyAudioHandler extends BaseAudioHandler {
       return;
     }
 
+    final nextIds = <String>[];
     for (int offset = 1; offset <= 2; offset++) {
       int nextIndex = currentIndex + offset;
       if (nextIndex < queue.value.length) {
         final songId = queue.value[nextIndex].id;
-        // ข้ามเพลง local — ไม่ต้อง pre-cache
-        if (songId.startsWith('local_')) continue;
-        // ข้ามเพลงที่เคย fail บ่อย
-        if ((_songFailureCount[songId] ?? 0) >= _maxSongFailures) continue;
-        try {
-          await ApiService().getAudioUrl(songId);
-        } catch (_) {}
-        // หยุดถ้า player เริ่มมีปัญหาระหว่าง pre-cache
-        if (_isHandlingError) break;
+        if (!songId.startsWith('local_') &&
+            (_songFailureCount[songId] ?? 0) < _maxSongFailures) {
+          nextIds.add(songId);
+        }
       }
+    }
+    if (nextIds.isNotEmpty) {
+      ApiService().prewarm(nextIds);
     }
   }
 
@@ -661,9 +660,9 @@ class MyAudioHandler extends BaseAudioHandler {
       _endChangingSong();
     }
 
-    // Pre-cache 3 เพลงถัดไปบน server (background, ไม่ block)
+    // 🚀 v82: Prewarm 3 เพลงถัดไปบน server (background, non-blocking)
     if (songs.length > 1) {
-      Future.microtask(() async {
+      Future.microtask(() {
         final nextIds = <String>[];
         for (int i = initialIndex + 1;
             i < songs.length && i < initialIndex + 4;
@@ -671,9 +670,7 @@ class MyAudioHandler extends BaseAudioHandler {
           if (!songs[i].isLocal) nextIds.add(songs[i].id);
         }
         if (nextIds.isNotEmpty) {
-          ApiService().batchResolveUrls(nextIds).catchError(
-            (_) => <String, String?>{},
-          );
+          ApiService().prewarm(nextIds);
         }
       });
     }

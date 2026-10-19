@@ -177,6 +177,11 @@ class SongProvider with ChangeNotifier {
     );
     _searchResults = results;
 
+    // 🚀 v82: Prewarm 4 เพลงแรกทันทีที่ค้นหาเจอ คลิกปุ๊บเล่นได้ทันทีแบบ YouTube
+    if (results.isNotEmpty) {
+      _apiService.prewarm(results.take(4).map((s) => s.id).toList());
+    }
+
     if (results.length < _pageSize) {
       _hasMoreResults = false;
     }

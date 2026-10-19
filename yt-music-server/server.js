@@ -1,9 +1,15 @@
 const express = require("express");
 const cors = require("cors");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 const https = require("https");
 const http = require("http");
+const readline = require("readline");
+
+// 🚀 v82: Keep-alive agents — reuse TLS connections to googlevideo (saves ~100-300ms per request)
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 64, keepAliveMsecs: 15_000 });
 
 const app = express();
 app.use(cors());
@@ -24,8 +30,19 @@ const CONFIG = {
   BATCH_MAX: 3,                         // 🔧 ลดจาก 15 → 3 เพื่อประหยัด CPU บน QNAP
   YTDLP_TIMEOUT: 30_000,
   MAX_REDIRECTS: 5,
-  MAX_CONCURRENT_YTDLP: 2,             // 🔧 จำกัด yt-dlp สูงสุด 2 ตัวพร้อมกัน
+  MAX_CONCURRENT_YTDLP: 2,             // 🔧 จำกัด yt-dlp สูงสุด 2 ตัวพร้อมกัน (เฉพาะ CLI fallback)
   LOG: process.env.LOG === "true",
+
+  // 🚀 v82: Persistent worker pool + prewarm + persistent cache
+  POOL_SIZE: parseInt(process.env.POOL_SIZE) || 2,           // จำนวน Python worker ที่เปิดค้างไว้
+  WORKER_TIMEOUT: 25_000,                                    // timeout ต่อ 1 งานใน worker
+  WORKER_MAX_JOBS: 300,                                      // recycle worker หลังทำครบ N งาน (กัน memory โต)
+  PREWARM_ON_SEARCH: parseInt(process.env.PREWARM_ON_SEARCH ?? "4"), // resolve เพลงบนสุดของผลค้นหาล่วงหน้า
+  PREWARM_MAX_QUEUE: 30,                                     // คิว prewarm สูงสุด (กัน CPU ล้น)
+  MAX_CACHE_TTL: 5 * 60 * 60 * 1000,                         // สูงสุด 5 ชม. (YouTube URL อยู่ได้ ~6 ชม.)
+  EXPIRE_SAFETY: 20 * 60 * 1000,                             // หมดอายุก่อน YouTube 20 นาที
+  CACHE_FILE: process.env.CACHE_FILE || path.join(__dirname, ".cache", "url-cache.json"),
+  CACHE_SAVE_INTERVAL: 60_000,
 };
 
 // yt-dlp executable path
@@ -85,16 +102,41 @@ const pendingResolutions = new Map();
 function getCachedUrl(videoId) {
   const cached = urlCache.get(videoId);
   if (!cached) return null;
-  const ttl = cached.isLive ? CONFIG.LIVE_CACHE_TTL : CONFIG.CACHE_TTL;
-  if (Date.now() - cached.timestamp < ttl) {
+  if (Date.now() < cached.expiresAt) {
     return cached;
   }
   urlCache.delete(videoId);
   return null;
 }
 
+// 🚀 v82: TTL ตามเวลาหมดอายุจริงของ YouTube (?expire=...) แทน 25 นาทีตายตัว
+function computeExpiresAt(url, isLive) {
+  const now = Date.now();
+  if (isLive) return now + CONFIG.LIVE_CACHE_TTL;
+  let ttl = CONFIG.CACHE_TTL;
+  try {
+    const u = new URL(url);
+    let expire = parseInt(u.searchParams.get("expire"));
+    if (!expire) {
+      const m = u.pathname.match(/\/expire\/(\d+)/);
+      if (m) expire = parseInt(m[1]);
+    }
+    if (expire) {
+      ttl = Math.min(expire * 1000 - now - CONFIG.EXPIRE_SAFETY, CONFIG.MAX_CACHE_TTL);
+    }
+  } catch {}
+  return now + Math.max(ttl, 60_000);
+}
+
 function setCachedUrl(videoId, url, isLive = false, isHls = false) {
-  urlCache.set(videoId, { url, isLive, isHls, timestamp: Date.now() });
+  urlCache.delete(videoId); // re-insert → ย้ายไปท้าย Map (LRU-ish)
+  urlCache.set(videoId, {
+    url,
+    isLive,
+    isHls,
+    timestamp: Date.now(),
+    expiresAt: computeExpiresAt(url, isLive),
+  });
   if (urlCache.size > CONFIG.CACHE_MAX) {
     const keys = urlCache.keys();
     for (let i = 0; i < CONFIG.CACHE_SWEEP; i++) {
@@ -169,10 +211,210 @@ async function runYtDlpLimited(args, timeoutMs = CONFIG.YTDLP_TIMEOUT) {
 }
 
 // ============================================
+// 🚀 v82: Persistent yt-dlp Worker Pool (resolver.py)
+// - yt-dlp ถูก import ค้างไว้ใน memory → ไม่ต้องเสียเวลาเปิด Python ใหม่ทุกครั้ง
+// - คิว 2 ระดับ: "high" = ผู้ใช้กดเล่น/ค้นหา, "low" = prewarm เบื้องหลัง
+// - ถ้า worker ใช้ไม่ได้ → fallback ไปใช้ yt-dlp CLI แบบเดิม
+// ============================================
+const PYTHON_BIN = process.env.PYTHON_BIN || (process.platform === "win32" ? "python" : "python3");
+const RESOLVER_SCRIPT = path.join(__dirname, "resolver.py");
+
+class WorkerPool {
+  constructor(size) {
+    this.size = size;
+    this.workers = [];
+    this.high = [];
+    this.low = [];
+    this.seq = 1;
+    this.disabled = !fs.existsSync(RESOLVER_SCRIPT);
+    this.stats = { done: 0, failed: 0, restarts: 0 };
+    if (this.disabled) {
+      console.warn("⚠️ resolver.py not found — using yt-dlp CLI only");
+      return;
+    }
+    for (let i = 0; i < size; i++) this._spawn(i);
+  }
+
+  _spawn(slot) {
+    const proc = spawn(PYTHON_BIN, ["-u", RESOLVER_SCRIPT], {
+      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    const w = { slot, proc, ready: false, busy: null, jobs: 0, dead: false };
+    this.workers[slot] = w;
+
+    readline.createInterface({ input: proc.stdout }).on("line", (line) => {
+      let msg;
+      try { msg = JSON.parse(line); } catch { return; }
+      if (msg.ready) {
+        w.ready = true;
+        log.info(`🐍 Worker #${slot} ready (yt-dlp ${msg.version})`);
+        this._dispatch();
+        return;
+      }
+      const job = w.busy;
+      if (!job || msg.id !== job.id) return;
+      clearTimeout(job.timer);
+      w.busy = null;
+      w.jobs++;
+      if (msg.ok) { this.stats.done++; job.resolve(msg); }
+      else { this.stats.failed++; job.reject(new Error(msg.error || "worker error")); }
+      if (w.jobs >= CONFIG.WORKER_MAX_JOBS) this._recycle(w);
+      else this._dispatch();
+    });
+
+    const onExit = () => {
+      if (w.dead) return;
+      w.dead = true;
+      if (w.busy) {
+        clearTimeout(w.busy.timer);
+        w.busy.reject(new Error("worker exited"));
+        w.busy = null;
+      }
+      this.stats.restarts++;
+      // ถ้าตายติดกันเร็วเกินไป (เช่น python ไม่มี) ให้รอนานขึ้น
+      setTimeout(() => { if (this.workers[slot] === w) this._spawn(slot); }, 2000);
+    };
+    proc.on("exit", onExit);
+    proc.on("error", (err) => {
+      log.error(`🐍 Worker #${slot} spawn error:`, err.message);
+      onExit();
+    });
+  }
+
+  _recycle(w) {
+    w.ready = false;
+    try { w.proc.kill(); } catch {}
+  }
+
+  get readyCount() {
+    return this.workers.filter((w) => w && w.ready && !w.dead).length;
+  }
+
+  available() {
+    return !this.disabled && this.readyCount > 0;
+  }
+
+  run(payload, priority = "high") {
+    return new Promise((resolve, reject) => {
+      const job = { id: this.seq++, payload, resolve, reject, timer: null };
+      if (priority === "low") {
+        if (this.low.length >= CONFIG.PREWARM_MAX_QUEUE) {
+          return reject(new Error("prewarm queue full"));
+        }
+        this.low.push(job);
+      } else {
+        this.high.push(job);
+      }
+      this._dispatch();
+    });
+  }
+
+  // ย้ายงาน low → high (เมื่อผู้ใช้กดเล่นเพลงที่กำลังรอ prewarm อยู่)
+  promote(predicate) {
+    const idx = this.low.findIndex((j) => predicate(j.payload));
+    if (idx !== -1) {
+      const [job] = this.low.splice(idx, 1);
+      this.high.unshift(job);
+      this._dispatch();
+    }
+  }
+
+  _dispatch() {
+    for (const w of this.workers) {
+      if (!w || !w.ready || w.dead || w.busy) continue;
+      const job = this.high.shift() || this.low.shift();
+      if (!job) return;
+      w.busy = job;
+      job.timer = setTimeout(() => {
+        if (w.busy === job) {
+          log.warn(`⏱ Worker #${w.slot} job timeout — restarting worker`);
+          w.busy = null;
+          this.stats.failed++;
+          job.reject(new Error("worker timeout"));
+          this._recycle(w);
+        }
+      }, CONFIG.WORKER_TIMEOUT);
+      try {
+        w.proc.stdin.write(JSON.stringify({ id: job.id, ...job.payload }) + "\n");
+      } catch (err) {
+        clearTimeout(job.timer);
+        w.busy = null;
+        job.reject(err);
+        this._recycle(w);
+      }
+    }
+  }
+
+  shutdown() {
+    for (const w of this.workers) {
+      if (!w) continue;
+      w.dead = true;
+      try { w.proc.kill(); } catch {}
+    }
+  }
+}
+
+const pool = new WorkerPool(CONFIG.POOL_SIZE);
+
+// ============================================
+// 🚀 v82: Persistent URL cache (รอด restart container)
+// ============================================
+function loadUrlCache() {
+  try {
+    const raw = fs.readFileSync(CONFIG.CACHE_FILE, "utf-8");
+    const data = JSON.parse(raw);
+    const now = Date.now();
+    let n = 0;
+    for (const [id, entry] of Object.entries(data)) {
+      if (entry && entry.url && entry.expiresAt > now && !entry.isLive) {
+        urlCache.set(id, entry);
+        n++;
+      }
+    }
+    console.log(`💾 Loaded ${n} cached URLs from disk`);
+  } catch {}
+}
+
+function saveUrlCache() {
+  try {
+    const now = Date.now();
+    const out = {};
+    for (const [id, entry] of urlCache) {
+      if (!entry.isLive && entry.expiresAt > now) out[id] = entry;
+    }
+    fs.mkdirSync(path.dirname(CONFIG.CACHE_FILE), { recursive: true });
+    const tmp = CONFIG.CACHE_FILE + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(out));
+    fs.renameSync(tmp, CONFIG.CACHE_FILE);
+  } catch (err) {
+    log.warn("Cache save failed:", err.message);
+  }
+}
+
+loadUrlCache();
+setInterval(saveUrlCache, CONFIG.CACHE_SAVE_INTERVAL).unref();
+
+// ============================================
+// 🚀 v82: Prewarm — resolve เพลงล่วงหน้าเบื้องหลัง (priority ต่ำ)
+// ทำให้ผู้ใช้กดเพลงแล้วเล่นทันที (cache hit ~50ms)
+// ============================================
+function prewarm(videoIds) {
+  let queued = 0;
+  for (const id of videoIds) {
+    if (!isValidVideoId(id)) continue;
+    if (getCachedUrl(id) || pendingResolutions.has(id)) continue;
+    resolveAudioUrl(id, "low").catch(() => null);
+    queued++;
+  }
+  return queued;
+}
+
+// ============================================
 // Helper: Get audio URL (shared logic)
 // Returns: { url, isLive, isHls } or null
 // ============================================
-async function resolveAudioUrl(videoId) {
+async function resolveAudioUrl(videoId, priority = "high") {
   // 1. Check Cache
   const cachedEntry = getCachedUrl(videoId);
   if (cachedEntry) return cachedEntry;
@@ -180,11 +422,36 @@ async function resolveAudioUrl(videoId) {
   // 2. Check if already resolving (Request Coalescing)
   if (pendingResolutions.has(videoId)) {
     log.info(`⏳ Coalescing URL request for: ${videoId}`);
-    return pendingResolutions.get(videoId);
+    // ผู้ใช้กดเพลงที่กำลังรอ prewarm อยู่ → ดันขึ้นหัวคิว
+    if (priority !== "high") return pendingResolutions.get(videoId);
+    pool.promote((p) => p.op === "resolve" && p.videoId === videoId);
+    const shared = await pendingResolutions.get(videoId);
+    if (shared) return shared;
+    // prewarm (priority ต่ำ) ล้มเหลว → ลองใหม่แบบ high (มี CLI fallback)
+    if (pendingResolutions.has(videoId)) return pendingResolutions.get(videoId);
+    const cachedNow = getCachedUrl(videoId);
+    if (cachedNow) return cachedNow;
   }
 
-  // 3. Resolve using yt-dlp — ดึง is_live ด้วย
+  // 3. Resolve — worker pool ก่อน (เร็ว), ถ้าล้มเหลว fallback เป็น yt-dlp CLI แบบเดิม
   const resolutionPromise = (async () => {
+    if (pool.available()) {
+      try {
+        const t0 = Date.now();
+        const r = await pool.run({ op: "resolve", videoId }, priority);
+        if (r && r.url) {
+          setCachedUrl(videoId, r.url, !!r.isLive, !!r.isHls);
+          log.info(`⚡ Worker resolved ${videoId} in ${Date.now() - t0}ms (${priority}) isLive=${r.isLive}`);
+          return getCachedUrl(videoId);
+        }
+      } catch (err) {
+        log.warn(`⚠️ Worker resolve failed for ${videoId}: ${err.message} → CLI fallback`);
+        if (priority === "low") {
+          // prewarm ล้มเหลว → ไม่ต้อง fallback (ประหยัด CPU) ให้ผู้ใช้กดแล้วค่อยลองใหม่
+          return null;
+        }
+      }
+    }
     try {
       // ดึง JSON metadata เพื่อตรวจ is_live + hls_manifest_url
       const infoArgs = [
@@ -193,6 +460,8 @@ async function resolveAudioUrl(videoId) {
         "--no-playlist",
         "--no-check-certificates",
         "--no-cache-dir",
+        "--extractor-args",
+        "youtube:player_client=android,web,mweb",
         "--print",
         "%(is_live)s\t%(live_status)s\t%(url)s\t%(hls_manifest_url)s",
         "-f",
@@ -223,13 +492,14 @@ async function resolveAudioUrl(videoId) {
     } catch (err) {
       log.error(`❌ Resolve failed for ${videoId}:`, err.message);
       return null;
-    } finally {
-      pendingResolutions.delete(videoId);
     }
   })();
 
-  pendingResolutions.set(videoId, resolutionPromise);
-  return resolutionPromise;
+  const tracked = resolutionPromise.finally(() => {
+    if (pendingResolutions.get(videoId) === tracked) pendingResolutions.delete(videoId);
+  });
+  pendingResolutions.set(videoId, tracked);
+  return tracked;
 }
 
 // ============================================
@@ -253,7 +523,11 @@ app.get("/api/search", async (req, res) => {
     const cached = getCachedSearch(cacheKey);
     if (cached) {
       log.info(`⚡ Search cache hit: "${query}"`);
-      return res.json({ results: cached });
+      res.json({ results: cached });
+      if (offset === 0 && CONFIG.PREWARM_ON_SEARCH > 0) {
+        prewarm(cached.filter((r) => !r.isLive).slice(0, CONFIG.PREWARM_ON_SEARCH).map((r) => r.id));
+      }
+      return;
     }
 
     // 2. Coalescing — ถ้ากำลังค้นหาคำเดิมอยู่ ให้รอผลจากอันเดิม
@@ -283,6 +557,20 @@ app.get("/api/search", async (req, res) => {
     ];
 
     const searchPromise = (async () => {
+      // 🚀 v82: ค้นหาผ่าน worker ก่อน (ไม่ต้องเปิด Python ใหม่)
+      if (pool.available()) {
+        try {
+          const r = await pool.run({ op: "search", query, offset, limit }, "high");
+          if (r && Array.isArray(r.results)) {
+            setCachedSearch(cacheKey, r.results);
+            log.info(`⚡ Worker search: "${query}" → ${r.results.length} results`);
+            pendingSearches.delete(cacheKey);
+            return r.results;
+          }
+        } catch (err) {
+          log.warn(`⚠️ Worker search failed: ${err.message} → CLI fallback`);
+        }
+      }
       try {
         const output = await runYtDlpLimited(args);
         const lines = output.split("\n").filter((line) => line.trim());
@@ -326,6 +614,11 @@ app.get("/api/search", async (req, res) => {
       return res.status(500).json({ error: "Search failed" });
     }
     res.json({ results });
+
+    // 🚀 v82: prewarm เพลงบนสุด (หลังส่งผลลัพธ์แล้ว — ไม่ทำให้ค้นหาช้าลง)
+    if (offset === 0 && CONFIG.PREWARM_ON_SEARCH > 0) {
+      prewarm(results.filter((r) => !r.isLive).slice(0, CONFIG.PREWARM_ON_SEARCH).map((r) => r.id));
+    }
   } catch (error) {
     log.error("Search error:", error.message);
     res.status(500).json({ error: "Search failed" });
@@ -434,7 +727,8 @@ app.get("/api/stream/:videoId", async (req, res) => {
       return;
     }
 
-    // ปกติ: proxy เหมือนเดิม
+    const isClientRange = Boolean(req.headers.range);
+    let retriedExpired = false;
     const proxyStream = (url, depth = 0) => {
       if (depth > CONFIG.MAX_REDIRECTS) {
         if (!res.headersSent)
@@ -446,22 +740,41 @@ app.get("/api/stream/:videoId", async (req, res) => {
       const protocol = parsedUrl.protocol === "https:" ? https : http;
 
       const headers = {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Connection: "keep-alive",
+        "Accept-Encoding": "identity",
       };
-      if (req.headers.range) {
-        headers["Range"] = req.headers.range;
+      headers["Range"] = req.headers.range || "bytes=0-";
+      if (req.headers["user-agent"]) {
+        headers["User-Agent"] = req.headers["user-agent"];
       }
 
+      // GVS requires isolated TLS socket per video stream (reusing keep-alive socket causes 403)
       const proxyReq = protocol.get(url, { headers }, (proxyRes) => {
         if (
           proxyRes.statusCode >= 300 &&
           proxyRes.statusCode < 400 &&
           proxyRes.headers.location
         ) {
+          proxyRes.resume();
           log.info(`↪️ Redirect [${depth}]`);
           proxyStream(proxyRes.headers.location, depth + 1);
+          return;
+        }
+
+        // 🚀 v82: URL ใน cache หมดอายุ/ถูกปฏิเสธ → resolve ใหม่ 1 ครั้งอัตโนมัติ
+        if ((proxyRes.statusCode === 403 || proxyRes.statusCode === 410) && !retriedExpired) {
+          retriedExpired = true;
+          proxyRes.resume();
+          log.warn(`🔁 Upstream ${proxyRes.statusCode} for ${videoId} — re-resolving`);
+          urlCache.delete(videoId);
+          resolveAudioUrl(videoId, "high")
+            .then((fresh) => {
+              if (fresh && fresh.url && !res.headersSent) proxyStream(fresh.url, 0);
+              else if (!res.headersSent) res.status(502).json({ error: "Stream unavailable" });
+            })
+            .catch(() => {
+              if (!res.headersSent) res.status(502).json({ error: "Stream unavailable" });
+            });
           return;
         }
 
@@ -477,11 +790,15 @@ app.get("/api/stream/:videoId", async (req, res) => {
           responseHeaders["Content-Length"] =
             proxyRes.headers["content-length"];
         }
-        if (proxyRes.headers["content-range"]) {
+
+        let statusCode = proxyRes.statusCode;
+        if (isClientRange && proxyRes.headers["content-range"]) {
           responseHeaders["Content-Range"] = proxyRes.headers["content-range"];
+        } else if (!isClientRange && statusCode === 206) {
+          statusCode = 200;
         }
 
-        res.writeHead(proxyRes.statusCode, responseHeaders);
+        res.writeHead(statusCode, responseHeaders);
         proxyRes.pipe(res);
       });
 
@@ -501,7 +818,7 @@ app.get("/api/stream/:videoId", async (req, res) => {
 });
 
 // ============================================
-// API: Get audio URL (direct CDN URL)
+// API: Get audio URL (direct CDN or Stream Proxy URL)
 // GET /api/audio-url/:videoId
 // ============================================
 app.get("/api/audio-url/:videoId", async (req, res) => {
@@ -516,12 +833,18 @@ app.get("/api/audio-url/:videoId", async (req, res) => {
 
     const resolved = await resolveAudioUrl(videoId);
     if (!resolved) {
-      return res.status(404).json({ error: "No audio URL found" });
+      return res.status(404).json({ error: "No audio stream found" });
     }
 
-    // ส่ง isLive + isHls กลับไปให้ Flutter App ตัดสินใจ
+    const host = req.get("host") || "music.growkub.com";
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    const streamProxyUrl = `${protocol}://${host}/api/stream/${videoId}`;
+
+    // For regular streams, return stream proxy URL so phone avoids YouTube IP lock
+    const playbackUrl = (resolved.isLive || resolved.isHls) ? resolved.url : streamProxyUrl;
+
     res.json({
-      url: resolved.url,
+      url: playbackUrl,
       isLive: resolved.isLive || false,
       isHls: resolved.isHls || false,
     });
@@ -549,16 +872,27 @@ app.post("/api/audio-urls", async (req, res) => {
 
     log.info(`📦 Batch resolving ${batch.length} URLs (max ${CONFIG.BATCH_MAX})...`);
 
+    const host = req.get("host") || "music.growkub.com";
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+
     const results = {};
 
-    // 🔧 รันแบบ sequential แทน parallel เพื่อไม่ให้ Semaphore คิวยาว
-    for (const videoId of batch) {
-      try {
-        results[videoId] = await resolveAudioUrl(videoId);
-      } catch {
-        results[videoId] = null;
-      }
-    }
+    // 🚀 v82: ใช้ worker pool (priority ต่ำ) แบบขนาน — คิวจัดการโหลดเอง
+    await Promise.all(
+      batch.map(async (videoId) => {
+        try {
+          const resolved = await resolveAudioUrl(videoId, "low");
+          if (resolved) {
+            const streamProxyUrl = `${protocol}://${host}/api/stream/${videoId}`;
+            results[videoId] = (resolved.isLive || resolved.isHls) ? resolved.url : streamProxyUrl;
+          } else {
+            results[videoId] = null;
+          }
+        } catch {
+          results[videoId] = null;
+        }
+      }),
+    );
 
     log.info(
       `✅ Batch resolved: ${Object.values(results).filter(Boolean).length}/${batch.length}`,
@@ -572,18 +906,41 @@ app.post("/api/audio-urls", async (req, res) => {
 
 // ============================================
 // API: Health check
-// GET /api/health
+// GET /health and /api/health
 // ============================================
+// ============================================
+// 🚀 v82: API: Prewarm (fire-and-forget)
+// POST /api/prewarm  Body: { videoIds: ["id1", ...] }
+// แอปเรียกตอนนิ้วแตะเพลง / ตอนเปิดแอป เพื่อให้ server resolve ไว้ก่อน
+// ============================================
+app.post("/api/prewarm", (req, res) => {
+  const { videoIds } = req.body || {};
+  if (!Array.isArray(videoIds)) {
+    return res.status(400).json({ error: "Missing videoIds array" });
+  }
+  const queued = prewarm(videoIds.slice(0, 10));
+  res.status(202).json({ queued });
+});
+
+app.get("/health", (req, res) => res.json({ status: "ok" }));
 app.get("/api/health", async (req, res) => {
   try {
     const version = await runYtDlp(["--version"]);
     res.json({
       status: "ok",
+      server_version: "v82",
       ytdlp_version: version,
       url_cache_size: urlCache.size,
       search_cache_size: searchCache.size,
       active_ytdlp: _activeYtDlp,
       queued_ytdlp: _ytDlpQueue.length,
+      pool: {
+        size: CONFIG.POOL_SIZE,
+        ready: pool.readyCount,
+        queued_high: pool.high.length,
+        queued_low: pool.low.length,
+        ...pool.stats,
+      },
       server_time: new Date().toISOString(),
     });
   } catch {
@@ -617,19 +974,9 @@ app.post("/api/speech-to-text", async (req, res) => {
       return res.status(400).json({ error: "Missing audio data" });
     }
 
-    const defaultGroqKey = Buffer.from(
-      "Z3NrX2JOS0FydGJSQmJRcmhCVDNjMm5CV0dkeTNiRllPV3VxUmxVQzJuM3l4QXQwb3dYNktzRE0=",
-      "base64"
-    ).toString("utf-8");
-
-    const groqKey = process.env.GROQ_API_KEY || defaultGroqKey;
-
+    const groqKey = process.env.GROQ_API_KEY || "";
     if (!groqKey) {
-      log.warn("⚠️ GROQ_API_KEY not set on server environment");
-      return res.status(503).json({
-        error: "GROQ_API_KEY environment variable not configured on server",
-        text: null,
-      });
+      return res.status(503).json({ error: "GROQ_API_KEY not configured" });
     }
 
     const audioBuffer = Buffer.from(audio, "base64");
