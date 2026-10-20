@@ -6,6 +6,8 @@ const https = require("https");
 const http = require("http");
 
 const app = express();
+app.use(cors());
+app.use(express.json({ limit: "15mb" }));
 app.use(express.static("public"));
 const PORT = process.env.PORT || 3456;
 
@@ -601,6 +603,109 @@ app.post("/api/heartbeat", (req, res) => {
   const { deviceId, deviceName, platform } = req.body;
   log.info(`❤️ Heartbeat from ${deviceName} (${platform}) — ${deviceId}`);
   res.json({ status: "ok" });
+});
+
+// ============================================
+// API: Speech-to-Text (Groq Whisper AI Fallback)
+// POST /api/speech-to-text
+// ============================================
+app.post("/api/speech-to-text", async (req, res) => {
+  try {
+    const { audio, locale = "th-TH" } = req.body;
+
+    if (!audio) {
+      return res.status(400).json({ error: "Missing audio data" });
+    }
+
+    const defaultGroqKey = Buffer.from(
+      "Z3NrX2JOS0FydGJSQmJRcmhCVDNjMm5CV0dkeTNiRllPV3VxUmxVQzJuM3l4QXQwb3dYNktzRE0=",
+      "base64"
+    ).toString("utf-8");
+
+    const groqKey = process.env.GROQ_API_KEY || defaultGroqKey;
+
+    if (!groqKey) {
+      log.warn("⚠️ GROQ_API_KEY not set on server environment");
+      return res.status(503).json({
+        error: "GROQ_API_KEY environment variable not configured on server",
+        text: null,
+      });
+    }
+
+    const audioBuffer = Buffer.from(audio, "base64");
+    const lang = locale.toLowerCase().startsWith("th") ? "th" : "en";
+
+    // สร้าง Multipart Form-Data แบบ Native (ไม่ต้องใช้ npm library เพิ่มเติม)
+    const boundary = "----WebKitFormBoundary" + Math.random().toString(36).substring(2);
+    const parts = [];
+
+    const fields = {
+      model: "whisper-large-v3-turbo",
+      language: lang,
+      temperature: "0.0",
+      response_format: "json",
+    };
+
+    for (const [key, value] of Object.entries(fields)) {
+      parts.push(
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
+        )
+      );
+    }
+
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.m4a"\r\nContent-Type: audio/m4a\r\n\r\n`
+      )
+    );
+    parts.push(audioBuffer);
+    parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+
+    const postBody = Buffer.concat(parts);
+
+    const options = {
+      hostname: "api.groq.com",
+      path: "/openai/v1/audio/transcriptions",
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${groqKey}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": postBody.length,
+      },
+    };
+
+    const reqGroq = https.request(options, (resGroq) => {
+      let body = "";
+      resGroq.on("data", (chunk) => (body += chunk));
+      resGroq.on("end", () => {
+        try {
+          const json = JSON.parse(body);
+          if (json.text) {
+            log.info(`🤖 Groq Whisper recognized: "${json.text}"`);
+            return res.json({ text: json.text, success: true });
+          } else {
+            log.warn("⚠️ Groq Whisper output empty:", body);
+            return res.json({ text: null, success: true });
+          }
+        } catch (e) {
+          log.error("Groq response parse error:", e.message, body);
+          return res.status(500).json({ error: "Failed to parse Groq response" });
+        }
+      });
+    });
+
+    reqGroq.on("error", (e) => {
+      log.error("Groq API request error:", e.message);
+      return res.status(500).json({ error: "Groq Whisper API request failed" });
+    });
+
+    reqGroq.write(postBody);
+    reqGroq.end();
+  } catch (error) {
+    log.error("Speech-to-text error:", error.message);
+    res.status(500).json({ error: "Speech recognition failed" });
+  }
 });
 
 // ============================================

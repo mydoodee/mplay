@@ -11,6 +11,7 @@ class ApiConfig {
   static String streamUrl(String videoId) => '$baseUrl/stream/$videoId';
   static String infoUrl(String videoId) => '$baseUrl/info/$videoId';
   static String audioUrl(String videoId) => '$baseUrl/audio-url/$videoId';
+  static String get speechToTextUrl => '$baseUrl/speech-to-text';
   
   // 📥 Update URL
   static String get updateUrl => 'https://music.growkub.com/version.json';

@@ -22,29 +22,16 @@ class VoiceSearchButton extends StatefulWidget {
   State<VoiceSearchButton> createState() => _VoiceSearchButtonState();
 }
 
-class _VoiceSearchButtonState extends State<VoiceSearchButton>
-    with SingleTickerProviderStateMixin {
+class _VoiceSearchButtonState extends State<VoiceSearchButton> {
   final SpeechToText _stt = SpeechToText();
   VoiceState _state = VoiceState.idle;
   bool _sttAvailable = false;
   String _partialText = '';
 
-  // Animation controller สำหรับ pulse ring
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.35).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
     _initSpeech();
   }
 
@@ -176,7 +163,6 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _stt.stop();
     super.dispose();
   }
@@ -188,61 +174,56 @@ class _VoiceSearchButtonState extends State<VoiceSearchButton>
 
     return GestureDetector(
       onTap: _handleTap,
-      child: AnimatedBuilder(
-        animation: _pulseAnim,
-        builder: (context, child) {
-          return Stack(
-            alignment: Alignment.center,
-            children: [
-              // Pulse ring — แสดงเฉพาะตอนกำลังฟัง
-              if (isListening)
-                Transform.scale(
-                  scale: _pulseAnim.value,
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFF15A24).withValues(alpha: 0.2),
-                    ),
-                  ),
-                ),
-
-              // ปุ่มหลัก
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isListening
-                      ? const Color(0xFFF15A24)
-                      : isProcessing
-                      ? const Color(0xFFF15A24).withValues(alpha: 0.6)
-                      : Colors.transparent,
-                ),
-                child: Center(
-                  child: isProcessing
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Icon(
-                          isListening ? Icons.stop_rounded : Icons.mic_rounded,
-                          color: isListening
-                              ? Colors.white
-                              : const Color(0xFF888888),
-                          size: 20,
-                        ),
-                ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // วงรอบ — แสดงเฉพาะตอนกำลังฟัง, ใช้ AnimatedOpacity ไม่สั่น
+          AnimatedOpacity(
+            opacity: isListening ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 200),
+            child: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFF15A24).withValues(alpha: 0.2),
               ),
-            ],
-          );
-        },
+            ),
+          ),
+
+          // ปุ่มหลัก
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isListening
+                  ? const Color(0xFFF15A24)
+                  : isProcessing
+                  ? const Color(0xFFF15A24).withValues(alpha: 0.6)
+                  : Colors.transparent,
+            ),
+            child: Center(
+              child: isProcessing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Icon(
+                      isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                      color: isListening
+                          ? Colors.white
+                          : const Color(0xFF888888),
+                      size: 20,
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
